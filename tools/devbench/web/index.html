@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ST DevBench</title>
+<style>
+:root {
+  --bg: #f4f4f1; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #d9d9d2;
+  --accent: #c8102e; --accent2: #0a5bd7; --ok: #1f8a3b; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #151514; --panel: #1f1f1d; --ink: #ecece6; --muted: #9a9a92; --line: #33332f;
+          --accent: #ff5a4e; --accent2: #5aa0ff; --ok: #4cc46b; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px;
+         border-bottom: 1px solid var(--line); background: var(--panel); }
+header h1 { font-size: 16px; margin: 0 12px 0 0; display: flex; align-items: center; gap: 8px; }
+/* the Fuji's three stripes */
+header h1 i { display: inline-flex; gap: 2px; align-items: flex-end; height: 14px; }
+header h1 i b { width: 4px; background: var(--accent); border-radius: 1px; }
+header h1 i b:nth-child(1), header h1 i b:nth-child(3) { height: 10px; } header h1 i b:nth-child(2) { height: 14px; }
+.sep { width: 1px; height: 22px; background: var(--line); margin: 0 4px; }
+main { display: grid; grid-template-columns: minmax(0, 700px) minmax(0, 1fr); gap: 16px; padding: 16px; }
+@media (max-width: 1000px) { main { grid-template-columns: minmax(0, 1fr); } }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; margin-bottom: 16px; }
+section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 8px;
+             display: flex; justify-content: space-between; align-items: center; }
+section h2 small { text-transform: none; letter-spacing: 0; font-weight: normal; }
+.screenbox { position: relative; background: #000; border-radius: 4px; aspect-ratio: 16/10; display: grid; place-items: center; overflow: hidden; }
+.screen { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; display: block; cursor: crosshair; }
+.screenbox .empty { position: absolute; color: #8a8a84; font-size: 13px; text-align: center; padding: 20px; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; }
+button, select, input { font: inherit; padding: 5px 9px; border: 1px solid var(--line); border-radius: 5px;
+  background: var(--bg); color: var(--ink); }
+button { cursor: pointer; } button:hover { border-color: var(--accent2); }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--accent2); color: #fff; border-color: var(--accent2); }
+button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+input.wide { flex: 1; min-width: 120px; }
+input.narrow { width: 90px; }
+pre { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 5px;
+  padding: 8px; margin: 0; overflow: auto; max-height: 260px; white-space: pre-wrap; word-break: break-all; }
+.status { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 12px; }
+@media (max-width: 600px) { .grid2 { grid-template-columns: 1fr; } }
+.err { color: var(--accent); }
+.okc { color: var(--ok); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 4px; }
+.dot.up { background: var(--ok); }
+.bps { list-style: none; padding: 0; margin: 6px 0 0; font-family: var(--mono); font-size: 12px; }
+.bps li { display: flex; gap: 8px; align-items: center; padding: 2px 0; }
+.bps li button { padding: 0 6px; font-size: 11px; }
+.desc { font-size: 12px; color: var(--muted); white-space: pre-wrap; margin: 4px 0 0; }
+.joy { display: grid; grid-template-columns: repeat(3, 34px); gap: 3px; }
+.joy button { padding: 4px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1><i><b></b><b></b><b></b></i>ST DevBench</h1>
+  <span class="status"><span class="dot" id="updot"></span><span id="uptext">Hatari: …</span></span>
+  <span class="sep"></span>
+  <select id="games" title="game (atari_st_games/games.ini)"></select>
+  <button id="build">Build</button>
+  <button id="run" class="primary">Run game</button>
+  <span class="sep"></span>
+  <select id="machine" title="machine">
+    <option value="st">ST</option><option value="ste" selected>STE</option><option value="megaste">Mega STE</option>
+    <option value="tt">TT</option><option value="falcon">Falcon030</option>
+  </select>
+  <button id="desktop">Start desktop</button>
+  <button id="quit">Stop Hatari</button>
+  <span class="status" id="msg"></span>
+</header>
+<main>
+  <div>
+    <section>
+      <h2>Screen <small class="status" id="stat"></small></h2>
+      <div class="screenbox">
+        <img id="screen" class="screen" alt="emulated screen" hidden>
+        <div class="empty" id="noscreen">Hatari isn't running. Run a game, or start the desktop.</div>
+      </div>
+      <div class="row">
+        <button data-run="1">+1 frame</button><button data-run="50">+1 s</button><button data-run="250">+5 s</button>
+        <button id="pause">Pause</button><button id="resume">Resume</button>
+        <button id="ff" title="fast forward">Fast ▶▶</button>
+        <button id="warm">Warm reset</button><button id="cold">Cold reset</button>
+        <label><input type="checkbox" id="live" checked> live</label>
+        <label title="clicking the screen clicks there in the emulator"><input type="checkbox" id="clicks" checked> click-through</label>
+      </div>
+      <div class="row">
+        <input id="key" class="narrow" placeholder="key: space, ctrl+z, f1">
+        <button id="press">Press</button>
+        <input id="text" class="wide" placeholder="type text (Enter = Return)">
+        <button id="type">Type</button>
+      </div>
+      <div class="row">
+        <div class="joy" title="joystick, port 1: held for the frames given">
+          <span></span><button data-joy="up">▲</button><span></span>
+          <button data-joy="left">◀</button><button data-joy="fire">●</button><button data-joy="right">▶</button>
+          <span></span><button data-joy="down">▼</button><span></span>
+        </div>
+        <label class="status">frames <input id="joyframes" class="narrow" value="10" style="width:56px"></label>
+        <span class="sep"></span>
+        <input id="snap" class="wide" placeholder="snapshot file, e.g. /tmp/st.sav">
+        <button id="save">Save state</button><button id="load">Load state</button>
+      </div>
+    </section>
+    <section>
+      <h2>Game</h2>
+      <div id="gameinfo" class="desc">—</div>
+      <pre id="out" style="margin-top:8px; max-height:200px"></pre>
+    </section>
+  </div>
+  <div>
+    <section>
+      <h2>Console <small class="status">TOS console and NatFeats output</small></h2>
+      <pre id="console" style="max-height:220px"></pre>
+      <div class="row"><button id="clearcon">Clear</button></div>
+    </section>
+    <section>
+      <h2>Debugger <small class="status" id="stop"></small></h2>
+      <div class="row">
+        <button id="brk">Break</button><button id="cont">Continue</button>
+        <button id="step">Step</button><button id="next">Step over</button>
+        <span class="sep"></span>
+        <input id="bp" class="wide" placeholder="breakpoint: address, symbol, or condition like pc=TEXT">
+        <button id="addbp">Add</button>
+      </div>
+      <ul class="bps" id="bps"></ul>
+      <div class="grid2" style="margin-top:8px"><pre id="regs"></pre><pre id="dis"></pre></div>
+      <div class="row">
+        <input id="dbg" class="wide" placeholder="Hatari debugger command: info osheader, symbols prg, m $ff8240-$ff8260">
+        <button id="dbgrun">Run</button>
+      </div>
+    </section>
+    <section>
+      <h2>Memory</h2>
+      <div class="row">
+        <input id="addr" class="wide" placeholder="address or expression: $ff8240, a0, pc, TEXT">
+        <input id="len" class="narrow" value="256" style="width:70px">
+        <button id="peek">Read</button>
+      </div>
+      <pre id="mem"></pre>
+    </section>
+    <section>
+      <h2>Agent API <small class="status">any endpoint (doc/agent-api.md)</small></h2>
+      <div class="row">
+        <select id="rawm"><option>GET</option><option>POST</option><option>DELETE</option></select>
+        <input id="rawp" class="wide" placeholder="/roms, /input/mouse?x=82&y=4, /config?args=--memsize 4096">
+        <button id="raw">Send</button>
+      </div>
+      <pre id="rawout"></pre>
+    </section>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const hex = (v) => typeof v === "number" ? "$" + v.toString(16).toUpperCase() : (v ?? "");
+let busy = false, up = false, conNext = 0, games = [];
+
+async function api(path, body, method) {
+  const r = await fetch(path, {method: method || (body !== undefined ? "POST" : "GET"),
+    headers: {"Content-Type": "application/json"}, body: body !== undefined ? JSON.stringify(body) : undefined});
+  const t = r.headers.get("content-type") || "";
+  const d = t.includes("json") ? await r.json() : await r.text();
+  if (!r.ok || d.ok === false) throw new Error((d && d.error) || r.statusText);
+  return d;
+}
+// the agent API: parameters in the query string (+ is encoded, so key combos survive)
+function hq(path, params) {
+  const q = Object.entries(params || {}).filter(([, v]) => v !== undefined && v !== "")
+    .map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v)).join("&");
+  return "/api/hatari" + path + (q ? "?" + q : "");
+}
+const H = (path, params) => api(hq(path, params));
+const HP = (path, params) => api(hq(path, params), undefined, "POST");
+function msg(t, bad) { $("msg").textContent = t; $("msg").className = "status" + (bad ? " err" : ""); }
+async function guard(fn) { try { await fn(); } catch (e) { msg(e.message, true); } }
+async function act(fn) { if (busy) return; busy = true; await guard(async () => { await fn(); await refresh(true); }); busy = false; }
+
+async function loadGames() {
+  games = await api("/api/projects");
+  $("games").innerHTML = games.map(g => `<option value="${g.id}">${g.title} (${g.machine_name})${g.built ? "" : " · not built"}</option>`).join("");
+  showGame();
+}
+function showGame() {
+  const g = games.find(g => g.id === $("games").value);
+  $("gameinfo").textContent = g ? `${g.title} · ${g.machine_name} · C:\\${g.program}${g.built ? "" : " (not built)"}\n\n${g.description}` +
+    (g.controls ? `\n\nControls\n${g.controls}` : "") : "No games: is atari_st_games checked out next to hatari_augmented?";
+}
+
+function setUp(isUp) {
+  up = isUp;
+  $("updot").className = "dot" + (up ? " up" : "");
+  $("uptext").textContent = up ? "Hatari running" : "Hatari stopped";
+  $("screen").hidden = !up; $("noscreen").hidden = up;
+}
+
+async function refresh(full) {
+  let st;
+  try { st = await H("/status"); } catch (e) { setUp(false); $("stat").textContent = ""; return; }
+  setUp(true);
+  $("screen").src = hq("/screen", {t: Date.now()});
+  const tos = st.tos ? ` · TOS ${st.tos.version ?? ""}${st.tos.emutos ? " (EmuTOS)" : ""}` : "";
+  $("stat").textContent = `${st.machine ?? ""} · ${st.state} · frame ${st.frame} · PC ${st.pc}${tos}`;
+  $("ff").classList.toggle("on", !!st.fast_forward);
+  $("stop").textContent = st.state === "stopped" && st.stop ? `stopped: ${st.stop.reason} at ${st.stop.pc}` : st.state;
+  const con = await H("/console", {since: conNext});
+  if (con.text) { $("console").textContent += con.text.replace(/\r/g, ""); $("console").scrollTop = 1e9; }
+  conNext = con.next ?? conNext;
+  if (!full && st.state === "running") return;
+  const r = (await H("/cpu/regs")).regs || {};
+  const keys = ["pc", "sr", ...[0,1,2,3,4,5,6,7].map(i => "d" + i), ...[0,1,2,3,4,5,6,7].map(i => "a" + i), "usp", "isp"];
+  $("regs").textContent = keys.filter(k => r[k] !== undefined).map(k => `${k.toUpperCase().padEnd(3)} ${r[k]}`).join("\n");
+  const d = await H("/cpu/disasm", {count: 14});
+  $("dis").textContent = (d.lines || []).map(l => l.text).join("\n");
+  const b = await H("/debug/breakpoints");
+  const list = Array.isArray(b) ? b : (b.breakpoints || []);
+  $("bps").innerHTML = list.length ? list.map(x => `<li><button data-del="${x.index}">✕</button>#${x.index} ${x.expression} · ${x.hits} hits</li>`).join("")
+    : `<li class="status">no breakpoints</li>`;
+}
+
+$("games").onchange = showGame;
+$("build").onclick = () => act(async () => { msg("building…"); const r = await api(`/api/projects/${$("games").value}/build`, {}); $("out").textContent = r.output; msg(r.ok ? "build OK" : "build FAILED", !r.ok); await loadGames(); });
+$("run").onclick = () => act(async () => { msg("starting…"); conNext = 0; $("console").textContent = ""; const r = await api(`/api/projects/${$("games").value}/run`, {}); $("out").textContent = r.output; msg(r.ok ? "running" : "failed", !r.ok); await loadGames(); });
+$("desktop").onclick = () => act(async () => { msg("starting…"); conNext = 0; $("console").textContent = ""; const r = await api("/api/hatari/start", {machine: $("machine").value}); $("out").textContent = r.output; msg(r.ok ? "desktop started" : "failed", !r.ok); });
+$("quit").onclick = () => act(async () => { const r = await api("/api/hatari/stop", {}); msg(r.ok ? "stopped" : r.output, !r.ok); });
+document.querySelectorAll("[data-run]").forEach(b => b.onclick = () => act(() => HP("/emu/run", {frames: b.dataset.run, pause: 1})));
+$("pause").onclick = () => act(() => HP("/emu/pause"));
+$("resume").onclick = () => act(() => HP("/emu/resume"));
+$("ff").onclick = () => act(() => HP("/emu/fastforward", {on: $("ff").classList.contains("on") ? 0 : 1}));
+$("warm").onclick = () => act(() => HP("/emu/reset", {type: "warm"}));
+$("cold").onclick = () => act(() => HP("/emu/reset", {type: "cold"}));
+$("press").onclick = () => act(() => HP("/input/key", {key: $("key").value}));
+$("key").onkeydown = (e) => { if (e.key === "Enter") $("press").click(); };
+$("type").onclick = () => act(() => HP("/input/type", {text: $("text").value + "\n"}));
+$("text").onkeydown = (e) => { if (e.key === "Enter") $("type").click(); };
+document.querySelectorAll("[data-joy]").forEach(b => b.onclick = () => act(() =>
+  HP("/input/joystick", {port: 1, dirs: b.dataset.joy === "fire" ? "none" : b.dataset.joy, fire: b.dataset.joy === "fire" ? 1 : 0, frames: $("joyframes").value || 10})));
+$("save").onclick = () => act(async () => { await HP("/state/save", {path: $("snap").value}); msg("state saved"); });
+$("load").onclick = () => act(async () => { await HP("/state/load", {path: $("snap").value}); msg("state loaded"); });
+$("clearcon").onclick = () => { $("console").textContent = ""; };
+$("screen").onclick = (e) => {
+  if (!$("clicks").checked) return;
+  const img = e.target, r = img.getBoundingClientRect();
+  // object-fit: contain: find the drawn image inside the element
+  const s = Math.min(r.width / img.naturalWidth, r.height / img.naturalHeight);
+  const ox = (r.width - img.naturalWidth * s) / 2, oy = (r.height - img.naturalHeight * s) / 2;
+  const x = Math.floor((e.clientX - r.left - ox) / s), y = Math.floor((e.clientY - r.top - oy) / s);
+  if (x < 0 || y < 0 || x >= img.naturalWidth || y >= img.naturalHeight) return;
+  act(async () => { await HP("/input/click", {x, y}); msg(`clicked ${x},${y}`); });
+};
+$("brk").onclick = () => act(() => HP("/debug/break"));
+$("cont").onclick = () => act(() => HP("/debug/continue"));
+$("step").onclick = () => act(() => HP("/debug/step", {count: 1}));
+$("next").onclick = () => act(() => HP("/debug/next"));
+$("addbp").onclick = () => act(async () => {
+  const v = $("bp").value.trim();
+  // a condition has a comparison in it; anything else is an address expression
+  await HP("/debug/breakpoints", /[=<>!]/.test(v) ? {cond: v} : {addr: v});
+  msg("breakpoint added");
+});
+$("bp").onkeydown = (e) => { if (e.key === "Enter") $("addbp").click(); };
+$("bps").onclick = (e) => { const i = e.target.dataset.del; if (i !== undefined) act(() => api(hq("/debug/breakpoints", {index: i}), undefined, "DELETE")); };
+$("dbgrun").onclick = () => act(async () => { const r = await HP("/debug/cmd", {cmd: $("dbg").value}); $("rawout").textContent = r.output ?? JSON.stringify(r, null, 1); });
+$("dbg").onkeydown = (e) => { if (e.key === "Enter") $("dbgrun").click(); };
+$("peek").onclick = () => act(async () => {
+  const r = await H("/mem", {addr: $("addr").value || "pc", len: $("len").value || 256});
+  const bytes = (r.hex || "").replace(/\s+/g, "").match(/../g) || [];
+  const base = parseInt(r.addr ?? "0", 16) || 0;
+  const rows = [];
+  for (let i = 0; i < bytes.length; i += 16) {
+    const chunk = bytes.slice(i, i + 16);
+    const ascii = chunk.map(h => { const c = parseInt(h, 16); return c >= 32 && c < 127 ? String.fromCharCode(c) : "."; }).join("");
+    rows.push(`${(base + i).toString(16).toUpperCase().padStart(6, "0")}  ${chunk.join(" ").padEnd(47)}  ${ascii}`);
+  }
+  $("mem").textContent = rows.join("\n");
+});
+$("addr").onkeydown = (e) => { if (e.key === "Enter") $("peek").click(); };
+$("raw").onclick = () => act(async () => {
+  const p = $("rawp").value.trim() || "/status";
+  const r = await fetch("/api/hatari" + (p.startsWith("/") ? p : "/" + p), {method: $("rawm").value});
+  const t = r.headers.get("content-type") || "";
+  $("rawout").textContent = t.includes("json") ? JSON.stringify(await r.json(), null, 1) : `${r.status} ${t} (${(await r.blob()).size} bytes)`;
+});
+$("rawp").onkeydown = (e) => { if (e.key === "Enter") $("raw").click(); };
+setInterval(() => { if ($("live").checked && !busy) { busy = true; refresh(false).finally(() => { busy = false; }); } }, 500);
+guard(async () => { await loadGames(); await refresh(true); });
+</script>
+</body>
+</html>
