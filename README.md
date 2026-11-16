@@ -51,6 +51,8 @@ curl -s -XPOST localhost:7777/debug/break
 * Design and changes to Hatari: [doc/agent-design.md](doc/agent-design.md)
 * Claude Code skill: [.claude/skills/hatari-agent/SKILL.md](.claude/skills/hatari-agent/SKILL.md)
 * Python client and GUI: `tools/agent/hatari_agent.py`, `python3 tools/agent/hatari_gui.py`
+* ST DevBench, a web workbench on top of the API that also builds and runs the game ports:
+  `python3 tools/devbench/devbench.py --open` ([tools/devbench](tools/devbench/README.md))
 
 ## Examples
 
