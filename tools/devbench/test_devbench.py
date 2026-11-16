@@ -11,6 +11,7 @@ import tempfile
 import threading
 import unittest
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -20,6 +21,7 @@ import devbench  # noqa: E402
 
 class FakeHatari(BaseHTTPRequestHandler):
     seen = []
+    symbols_loaded = True
 
     def log_message(self, *a):
         pass
@@ -32,6 +34,21 @@ class FakeHatari(BaseHTTPRequestHandler):
             out, ctype, code = b"\x89PNG fake", "image/png", 200
         elif self.path.startswith("/emu/quit"):
             out, ctype, code = b'{"ok":true}', "application/json", 200
+        elif self.path.startswith("/debug/cmd"):
+            cmd = urllib.parse.parse_qs(body.decode()).get("cmd", [""])[0]
+            if cmd == "e TEXT":
+                text = "= %11011000000011000 (bin), #110616 (dec), $1b018 (hex)\n"
+            elif cmd == "symbols prg":
+                FakeHatari.symbols_loaded = True
+                text = "Reading symbols from program 'GAME.PRG' symbol table...\nLoaded 3 symbols."
+            elif not FakeHatari.symbols_loaded:
+                text = "0 CPU symbols (of 0) sorted by name.\n"
+            elif cmd == "symbols name main":
+                text = ("0x0002a152 T __main\n0x0002909e W _main\n0x0005d9e4 B _pdomain\n"
+                        "3 CPU symbols (of 711) sorted by name.\n")
+            else:
+                text = "0x0001b0b8 T main\n1 CPU symbols (of 711) sorted by name.\n"
+            out, ctype, code = json.dumps({"ok": True, "output": text}).encode(), "application/json", 200
         elif self.path.startswith("/debug/step"):
             out, ctype, code = b'{"ok":false,"error":"not stopped"}', "application/json", 409
         else:
@@ -137,6 +154,49 @@ class DevBenchTest(unittest.TestCase):
         code, _, body = self.call("GET", "/api/hatari/status")
         self.assertEqual(code, 502)
         self.assertIn("isn't answering", json.loads(body)["error"])
+
+    def test_symbols(self):
+        self.start()
+        code, _, body = self.call("GET", "/api/symbols?find=main")
+        r = json.loads(body)
+        self.assertEqual(code, 200)
+        self.assertEqual(r["symbols"][1], {"addr": "0x0002909e", "type": "W", "name": "_main"})
+        self.assertEqual((len(r["symbols"]), r["total"]), (3, 711))
+        self.assertEqual(FakeHatari.seen[-1][2], b"cmd=symbols+name+main")
+        # nothing loaded yet: "symbols prg" loads the running program's, then it asks again
+        FakeHatari.symbols_loaded = False
+        self.addCleanup(setattr, FakeHatari, "symbols_loaded", True)
+        r = json.loads(self.call("GET", "/api/symbols")[2])
+        self.assertEqual([c[2] for c in FakeHatari.seen[-3:]],
+                         [b"cmd=symbols+name", b"cmd=symbols+prg", b"cmd=symbols+name"])
+        self.assertEqual(r["symbols"], [{"addr": "0x0001b0b8", "type": "T", "name": "main"}])
+        # no debugger commands smuggled in through find
+        self.assertEqual(self.call("GET", "/api/symbols?find=x%3Bc")[0], 400)
+        self.assertEqual(self.call("GET", "/api/symbols?find=a+b")[0], 400)
+
+    def test_symbols_of_the_running_program(self):
+        # a game started from here: its PRG's symbols (gst2ascii), moved to TEXT
+        tool = os.path.join(self.tmp.name, "gst2ascii")
+        with open(tool, "w") as f:
+            f.write("#!/bin/sh\necho 'Reading symbols...' >&2\n"
+                    "printf '0x0000162e T game_update\\n0x00027000 B score\\n0x00000000 T _start\\n'\n")
+        os.chmod(tool, 0o755)
+        old = devbench.GST2ASCII
+        devbench.GST2ASCII = tool
+        self.addCleanup(setattr, devbench, "GST2ASCII", old)
+        self.start()
+        devbench.Handler.bench.playing = "lander"
+        r = json.loads(self.call("GET", "/api/symbols?find=game")[2])
+        self.assertEqual(r["source"], "prg")
+        self.assertEqual(r["symbols"], [{"addr": "0x0001c646", "type": "T", "name": "game_update"}])
+        self.assertEqual(r["total"], 3)
+        r = json.loads(self.call("GET", "/api/symbols")[2])
+        self.assertEqual([x["name"] for x in r["symbols"]], ["_start", "game_update", "score"])
+        self.assertEqual(r["symbols"][2]["addr"], "0x00042018")
+
+    def test_symbols_without_hatari(self):
+        self.start(hatari=False)
+        self.assertEqual(self.call("GET", "/api/symbols?find=main")[0], 502)
 
     def test_errors(self):
         self.start()

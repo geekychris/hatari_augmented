@@ -7,11 +7,12 @@
 <style>
 :root {
   --bg: #f4f4f1; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #d9d9d2;
-  --accent: #c8102e; --accent2: #0a5bd7; --ok: #1f8a3b; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --accent: #c8102e; --accent2: #0a5bd7; --ok: #1f8a3b; --hl: #fff1a8; --pcbg: #dce9ff; --chg: #c8102e;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #151514; --panel: #1f1f1d; --ink: #ecece6; --muted: #9a9a92; --line: #33332f;
-          --accent: #ff5a4e; --accent2: #5aa0ff; --ok: #4cc46b; }
+          --accent: #ff5a4e; --accent2: #5aa0ff; --ok: #4cc46b; --hl: #5a4a00; --pcbg: #1d3354; --chg: #ff7a6e; }
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, sans-serif; }
@@ -22,16 +23,19 @@ header h1 { font-size: 16px; margin: 0 12px 0 0; display: flex; align-items: cen
 header h1 i { display: inline-flex; gap: 2px; align-items: flex-end; height: 14px; }
 header h1 i b { width: 4px; background: var(--accent); border-radius: 1px; }
 header h1 i b:nth-child(1), header h1 i b:nth-child(3) { height: 10px; } header h1 i b:nth-child(2) { height: 14px; }
+header select#games { max-width: 100%; }
 .sep { width: 1px; height: 22px; background: var(--line); margin: 0 4px; }
-main { display: grid; grid-template-columns: minmax(0, 700px) minmax(0, 1fr); gap: 16px; padding: 16px; }
-@media (max-width: 1000px) { main { grid-template-columns: minmax(0, 1fr); } }
-section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; margin-bottom: 16px; }
+.grow { flex: 1; }
+main { padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+.top { display: grid; grid-template-columns: minmax(0, 560px) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 1000px) { .top { grid-template-columns: minmax(0, 1fr); } }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
 section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 8px;
-             display: flex; justify-content: space-between; align-items: center; }
+             display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 section h2 small { text-transform: none; letter-spacing: 0; font-weight: normal; }
+h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 6px; }
 .screenbox { position: relative; background: #000; border-radius: 4px; aspect-ratio: 16/10; display: grid; place-items: center; overflow: hidden; }
 .screenbox:focus { box-shadow: 0 0 0 3px var(--accent2); outline: none; }
-.gamepic { max-width: 220px; width: 100%; image-rendering: pixelated; border-radius: 4px; float: right; margin: 0 0 8px 10px; }
 .screen { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; display: block; cursor: crosshair; }
 .screenbox .empty { position: absolute; color: #8a8a84; font-size: 13px; text-align: center; padding: 20px; }
 .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; }
@@ -41,23 +45,64 @@ button { cursor: pointer; } button:hover { border-color: var(--accent2); }
 button:disabled { opacity: .5; cursor: default; }
 button.primary { background: var(--accent2); color: #fff; border-color: var(--accent2); }
 button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+button.small { padding: 1px 6px; font-size: 12px; }
 input.wide { flex: 1; min-width: 120px; }
 input.narrow { width: 90px; }
+input.num { width: 64px; }
 pre { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 5px;
   padding: 8px; margin: 0; overflow: auto; max-height: 260px; white-space: pre-wrap; word-break: break-all; }
 .status { font-family: var(--mono); font-size: 12px; color: var(--muted); }
-.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 12px; }
-@media (max-width: 600px) { .grid2 { grid-template-columns: 1fr; } }
 .err { color: var(--accent); }
-.okc { color: var(--ok); }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 4px; }
 .dot.up { background: var(--ok); }
-.bps { list-style: none; padding: 0; margin: 6px 0 0; font-family: var(--mono); font-size: 12px; }
-.bps li { display: flex; gap: 8px; align-items: center; padding: 2px 0; }
-.bps li button { padding: 0 6px; font-size: 11px; }
 .desc { font-size: 12px; color: var(--muted); white-space: pre-wrap; margin: 4px 0 0; }
 .joy { display: grid; grid-template-columns: repeat(3, 34px); gap: 3px; }
 .joy button { padding: 4px 0; }
+/* tabs (console / game / agent API) */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: -4px 0 10px; flex-wrap: wrap; }
+.tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 6px 10px; color: var(--muted); }
+.tabs button.sel { color: var(--ink); border-bottom-color: var(--accent2); }
+.tab[hidden] { display: none; }
+#console { max-height: 340px; min-height: 200px; }
+.gamepic { width: 200px; max-width: 45%; image-rendering: pixelated; border-radius: 4px; float: right; margin: 0 0 8px 10px; }
+/* debugger */
+.dbg { display: grid; grid-template-columns: 250px minmax(0, 1fr) 320px; gap: 14px; align-items: start; }
+@media (max-width: 1200px) { .dbg { grid-template-columns: 250px minmax(0, 1fr); } .dbg .side { grid-column: 1 / -1; } }
+@media (max-width: 700px) { .dbg { grid-template-columns: minmax(0, 1fr); } }
+.mono { font-family: var(--mono); font-size: 12px; }
+.regs { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 1px 8px; background: var(--bg); border: 1px solid var(--line);
+        border-radius: 5px; padding: 8px; }
+.regs .n { color: var(--muted); }
+.regs .v { cursor: pointer; } .regs .v:hover { text-decoration: underline; }
+.regs .v.chg, .hex .chg { color: var(--chg); font-weight: 600; }
+.stale { opacity: .55; }
+.flags { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 3px; }
+.flags span { border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; color: var(--muted); }
+.flags span.set { background: var(--accent2); color: #fff; border-color: var(--accent2); }
+.dis { background: var(--bg); border: 1px solid var(--line); border-radius: 5px; overflow-x: auto; padding: 4px 0; }
+.dl { display: flex; white-space: pre; line-height: 1.5; min-width: max-content; padding-right: 8px; }
+.dl:hover { background: var(--line); }
+.dl.pc { background: var(--pcbg); }
+.dl .g { width: 22px; text-align: center; cursor: pointer; color: transparent; flex: none; }
+.dl:hover .g { color: var(--muted); }
+.dl .g.bp { color: var(--accent); }
+.dl .p { width: 14px; color: var(--accent2); flex: none; }
+.dl .a { color: var(--muted); width: 9ch; flex: none; }
+.dl .b { color: var(--muted); width: 22ch; flex: none; }
+.dl .lbl { color: var(--ok); }
+.bps { list-style: none; padding: 0; margin: 6px 0 0; font-family: var(--mono); font-size: 12px; }
+.bps li { display: flex; gap: 8px; align-items: center; padding: 2px 0; overflow-wrap: anywhere; }
+.syms { max-height: 220px; overflow: auto; font-family: var(--mono); font-size: 12px; border: 1px solid var(--line);
+        border-radius: 5px; background: var(--bg); }
+.syms div { display: flex; gap: 6px; align-items: center; padding: 1px 6px; white-space: nowrap; }
+.syms div span:first-child { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.side > div + div { margin-top: 12px; }
+/* memory */
+.hex { background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 8px; overflow-x: auto;
+       font-family: var(--mono); font-size: 12px; line-height: 1.5; white-space: pre; max-height: 420px; overflow-y: auto; }
+.hex .ad { color: var(--muted); }
+.hex .as { color: var(--muted); }
+.hint { font-size: 12px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -75,15 +120,15 @@ pre { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 
   </select>
   <button id="desktop">Start desktop</button>
   <button id="quit">Stop Hatari</button>
-  <span class="status" id="msg"></span>
-  <span style="flex:1"></span>
+  <span class="status" id="msg" role="status"></span>
+  <span class="grow"></span>
   <a href="/arcade" style="color:var(--accent2);text-decoration:none">Arcade →</a>
 </header>
 <main>
-  <div>
+  <div class="top">
     <section>
       <h2>Screen <small class="status" id="stat"></small></h2>
-      <div class="screenbox" id="screenbox" tabindex="0" title="focus the screen (Tab, or click with click-through off) to type on the ST keyboard">
+      <div class="screenbox" id="screenbox" tabindex="0" title="focus the screen (Tab, or click it) to type on the ST keyboard">
         <img id="screen" class="screen" alt="emulated screen" hidden>
         <div class="empty" id="noscreen">Hatari isn't running. Run a game, or start the desktop.</div>
       </div>
@@ -95,7 +140,7 @@ pre { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 
         <label><input type="checkbox" id="live" checked> live</label>
         <label title="clicking the screen clicks there in the emulator"><input type="checkbox" id="clicks" checked> click-through</label>
       </div>
-      <div class="row status">
+      <div class="row hint">
         Keyboard: while the screen has focus (blue ring) your keys are held down on the ST as long as you hold them.
         <label title="cursor keys and Space / Ctrl drive the joystick in port 1"><input type="checkbox" id="joymode"> cursor keys + Space = joystick</label>
       </div>
@@ -111,66 +156,127 @@ pre { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 
           <button data-joy="left">◀</button><button data-joy="fire">●</button><button data-joy="right">▶</button>
           <span></span><button data-joy="down">▼</button><span></span>
         </div>
-        <label class="status">frames <input id="joyframes" class="narrow" value="10" style="width:56px"></label>
+        <label class="status">frames <input id="joyframes" class="num" value="10"></label>
         <span class="sep"></span>
         <input id="snap" class="wide" placeholder="snapshot file, e.g. /tmp/st.sav">
         <button id="save">Save state</button><button id="load">Load state</button>
       </div>
     </section>
     <section>
-      <h2>Game</h2>
-      <img id="gamepic" class="gamepic" alt="" hidden>
-      <div id="gameinfo" class="desc">—</div>
-      <pre id="out" style="margin-top:8px; max-height:200px"></pre>
+      <div class="tabs" role="tablist">
+        <button data-tab="console" role="tab">Console</button>
+        <button data-tab="game" role="tab">Game</button>
+        <button data-tab="api" role="tab">Agent API</button>
+      </div>
+      <div class="tab" id="tab-console">
+        <pre id="console"></pre>
+        <div class="row"><span class="hint">TOS console and NatFeats output</span><span class="grow"></span><button id="clearcon">Clear</button></div>
+      </div>
+      <div class="tab" id="tab-game" hidden>
+        <img id="gamepic" class="gamepic" alt="" hidden>
+        <div id="gameinfo" class="desc">—</div>
+        <pre id="out" style="margin-top:8px; max-height:200px; clear:both"></pre>
+      </div>
+      <div class="tab" id="tab-api" hidden>
+        <div class="row">
+          <select id="rawm"><option>GET</option><option>POST</option><option>DELETE</option></select>
+          <input id="rawp" class="wide" placeholder="/roms, /input/mouse?x=82&y=4, /config?args=--memsize 4096">
+          <button id="raw">Send</button>
+        </div>
+        <pre id="rawout"></pre>
+        <p class="hint">Any agent API endpoint (doc/agent-api.md), through /api/hatari/.</p>
+      </div>
     </section>
   </div>
-  <div>
-    <section>
-      <h2>Console <small class="status">TOS console and NatFeats output</small></h2>
-      <pre id="console" style="max-height:220px"></pre>
-      <div class="row"><button id="clearcon">Clear</button></div>
-    </section>
-    <section>
-      <h2>Debugger <small class="status" id="stop"></small></h2>
-      <div class="row">
-        <button id="brk">Break</button><button id="cont">Continue</button>
-        <button id="step">Step</button><button id="next">Step over</button>
-        <span class="sep"></span>
-        <input id="bp" class="wide" placeholder="breakpoint: address, symbol, or condition like pc=TEXT">
-        <button id="addbp">Add</button>
+
+  <section id="debugger">
+    <h2>Debugger <small class="status" id="stop"></small></h2>
+    <div class="row">
+      <button id="brk">Break</button><button id="cont" class="primary">Continue</button>
+      <span class="sep"></span>
+      <button id="step" title="one instruction">Step</button>
+      <button id="stepn">Step ×</button><input id="stepcount" class="num" value="10" aria-label="instructions to step">
+      <button id="next" title="step over subroutine calls and traps">Step over</button>
+      <button id="out1" title="run until the current subroutine returns">Step out</button>
+    </div>
+    <div class="dbg">
+      <div>
+        <h3>Registers</h3>
+        <div class="regs mono" id="regs"></div>
+        <div class="flags mono" id="flags" title="SR: trace, supervisor, master, interrupt mask, extend, negative, zero, overflow, carry"></div>
+        <p class="hint">Click a value to dump memory there.</p>
       </div>
-      <ul class="bps" id="bps"></ul>
-      <div class="grid2" style="margin-top:8px"><pre id="regs"></pre><pre id="dis"></pre></div>
-      <div class="row">
-        <input id="dbg" class="wide" placeholder="Hatari debugger command: info osheader, symbols prg, m $ff8240-$ff8260">
-        <button id="dbgrun">Run</button>
+      <div>
+        <h3>Disassembly</h3>
+        <div class="row" style="margin-top:0">
+          <input id="disaddr" class="wide" value="pc" placeholder="pc, _main, $2909e, a0" aria-label="disassemble at">
+          <input id="discount" class="num" value="24" aria-label="lines">
+          <button id="disgo">Go</button>
+          <button id="disup" title="previous page">▲ Up</button><button id="disdown" title="next page">▼ Down</button>
+          <button id="dispc">PC</button>
+          <label class="hint"><input type="checkbox" id="follow" checked> follow PC</label>
+        </div>
+        <div class="dis mono" id="dis"></div>
+        <p class="hint">Click the gutter to set or clear a breakpoint; double-click a line to run to it.</p>
       </div>
-    </section>
-    <section>
-      <h2>Memory</h2>
-      <div class="row">
-        <input id="addr" class="wide" placeholder="address or expression: $ff8240, a0, pc, TEXT">
-        <input id="len" class="narrow" value="256" style="width:70px">
-        <button id="peek">Read</button>
+      <div class="side">
+        <div>
+          <h3>Breakpoints</h3>
+          <div class="row" style="margin-top:0">
+            <input id="bp" class="wide" placeholder="address, symbol, or condition (pc=TEXT, d0=$20)">
+            <button id="addbp">Add</button>
+          </div>
+          <div class="row">
+            <input id="watch" class="wide" placeholder="watch: _score, $ff8240, a0" aria-label="watch address">
+            <select id="watchsz" aria-label="size"><option value="b">byte</option><option value="w" selected>word</option><option value="l">long</option></select>
+            <button id="addwatch" title="break when the value there changes">Watch</button>
+          </div>
+          <ul class="bps" id="bps"></ul>
+        </div>
+        <div>
+          <h3>Symbols</h3>
+          <div class="row" style="margin-top:0">
+            <input id="symq" class="wide" placeholder="name or part of one: main, _score">
+            <button id="symgo">Find</button>
+          </div>
+          <div class="syms" id="syms"><div class="hint">The running program's symbols (from its PRG).</div></div>
+        </div>
+        <div>
+          <h3>Debugger command</h3>
+          <div class="row" style="margin-top:0">
+            <input id="dbg" class="wide" placeholder="info basepage, symbols prg, m $ff8240-$ff8260">
+            <button id="dbgrun">Run</button>
+          </div>
+          <pre id="dbgout" hidden></pre>
+        </div>
       </div>
-      <pre id="mem"></pre>
-    </section>
-    <section>
-      <h2>Agent API <small class="status">any endpoint (doc/agent-api.md)</small></h2>
-      <div class="row">
-        <select id="rawm"><option>GET</option><option>POST</option><option>DELETE</option></select>
-        <input id="rawp" class="wide" placeholder="/roms, /input/mouse?x=82&y=4, /config?args=--memsize 4096">
-        <button id="raw">Send</button>
-      </div>
-      <pre id="rawout"></pre>
-    </section>
-  </div>
+    </div>
+  </section>
+
+  <section id="memory">
+    <h2>Memory <small class="status" id="memstat"></small></h2>
+    <div class="row" style="margin-top:0">
+      <input id="addr" class="wide" placeholder="address or expression: $ff8240, a0, pc, _main, TEXT" aria-label="address">
+      <input id="len" class="num" value="256" aria-label="bytes">
+      <button id="peek" class="primary">Read</button>
+      <button id="memprev">◀ Prev</button><button id="memnext">Next ▶</button>
+      <label class="hint"><input type="checkbox" id="memauto" checked> refresh on stop / step</label>
+    </div>
+    <div class="hex" id="mem"><span class="hint">Pick an address, or click a register.</span></div>
+    <div class="row">
+      <input id="wraddr" class="narrow" placeholder="address" aria-label="write at">
+      <input id="wrhex" class="wide" placeholder="bytes to write, hex: 4e71 4e71" aria-label="bytes to write">
+      <button id="write">Write</button>
+      <span class="hint">Changed bytes since the last read are in red.</span>
+    </div>
+  </section>
 </main>
 <script src="/keys.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
-const hex = (v) => typeof v === "number" ? "$" + v.toString(16).toUpperCase() : (v ?? "");
-let busy = false, up = false, conNext = 0, games = [];
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const hx = (n, w) => n.toString(16).toUpperCase().padStart(w || 6, "0");
+let busy = false, up = false, conNext = 0, games = [], stopKey = "", lastState = "";
 
 async function api(path, body, method) {
   const r = await fetch(path, {method: method || (body !== undefined ? "POST" : "GET"),
@@ -190,12 +296,30 @@ const H = (path, params) => api(hq(path, params));
 const HP = (path, params) => api(hq(path, params), undefined, "POST");
 function msg(t, bad) { $("msg").textContent = t; $("msg").className = "status" + (bad ? " err" : ""); }
 async function guard(fn) { try { await fn(); } catch (e) { msg(e.message, true); } }
-async function act(fn) { if (busy) return; busy = true; await guard(async () => { await fn(); await refresh(true); }); busy = false; }
+// a button waits for the poll in flight (rather than being dropped), then runs alone
+async function act(fn) {
+  for (let i = 0; busy && i < 100; i++) await new Promise(r => setTimeout(r, 50));
+  busy = true;
+  await guard(async () => { await fn(); await refresh(); });
+  busy = false;
+}
 
+// ---- tabs (remembered) ----
+function showTab(name) {
+  document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("sel", b.dataset.tab === name));
+  document.querySelectorAll(".tab").forEach(t => t.hidden = t.id !== "tab-" + name);
+  try { localStorage.setItem("stdb-tab", name); } catch (e) {}
+}
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+let savedTab = "console";
+try { savedTab = localStorage.getItem("stdb-tab") || "console"; } catch (e) {}
+showTab(["console", "game", "api"].includes(savedTab) ? savedTab : "console");
+
+// ---- games ----
 async function loadGames() {
   games = await api("/api/projects");
   const cur = $("games").value || new URLSearchParams(location.search).get("game");
-  const opt = (g) => `<option value="${g.id}"${g.playable ? "" : " disabled"}>${g.title} (${g.machine_name})${g.built ? "" : " · not built"}</option>`;
+  const opt = (g) => `<option value="${esc(g.id)}"${g.playable ? "" : " disabled"}>${esc(g.title)} (${esc(g.machine_name)})${g.built ? "" : " · not built"}</option>`;
   const others = games.filter(g => g.kind !== "game" && g.kind !== "library");
   $("games").innerHTML = `<optgroup label="Games">${games.filter(g => g.kind === "game").map(opt).join("")}</optgroup>` +
     (others.length ? `<optgroup label="Demos and tools">${others.map(opt).join("")}</optgroup>` : "");
@@ -219,34 +343,238 @@ function setUp(isUp) {
   $("screen").hidden = !up; $("noscreen").hidden = up;
 }
 
-async function refresh(full) {
+// ---- registers ----
+let regsPrev = {};
+const SR_FLAGS = [["T1", 15], ["T0", 14], ["S", 13], ["M", 12], ["X", 4], ["N", 3], ["Z", 2], ["V", 1], ["C", 0]];
+function showRegs(r, stopped) {
+  const v = (k) => r[k] !== undefined ? `<span class="v${regsPrev[k] !== undefined && regsPrev[k] !== r[k] ? " chg" : ""}" data-val="${r[k]}">${String(r[k]).replace(/^0x/, "")}</span>` : "<span></span>";
+  const rows = [];
+  for (let i = 0; i < 8; i++) rows.push(`<span class="n">D${i}</span>${v("d" + i)}<span class="n">A${i}</span>${v("a" + i)}`);
+  rows.push(`<span class="n">PC</span>${v("pc")}<span class="n">SR</span>${v("sr")}`);
+  rows.push(`<span class="n">USP</span>${v("usp")}<span class="n">ISP</span>${v("isp")}`);
+  if (r.msp !== undefined) rows.push(`<span class="n">MSP</span>${v("msp")}<span class="n">VBR</span>${v("vbr")}`);
+  $("regs").innerHTML = rows.join("");
+  $("regs").classList.toggle("stale", !stopped);
+  const sr = parseInt(r.sr, 16) || 0;
+  $("flags").innerHTML = SR_FLAGS.map(([n, b]) => `<span class="${sr >> b & 1 ? "set" : ""}">${n}</span>`).join("") +
+    `<span class="set">IPL ${sr >> 8 & 7}</span>`;
+  regsPrev = r;
+}
+$("regs").onclick = (e) => { const val = e.target.dataset.val; if (val) { $("addr").value = "$" + val.replace(/^0x/, ""); readMem(); } };
+
+// ---- disassembly ----
+let dis = {lines: [], pc: null}, bpAddrs = new Map();
+const num = (s) => parseInt(String(s).replace(/^\$|^0x/i, ""), 16);
+function parseLine(l) {
+  const m = /^([0-9a-f]{6,8})\s((?:[0-9a-f]{4} ?)*)\s+(.*)$/i.exec(l.text);
+  return {addr: num(l.addr), bytes: m ? m[2].trim() : "", ins: m ? m[3] : l.text};
+}
+// the program's code symbols: labels in the disassembly, "in func+$n" in the stop line
+let symMap = null, symSorted = [];
+async function loadSymbols() {
+  try {
+    const r = await api("/api/symbols");
+    symSorted = r.symbols.filter(s => "TtWw".includes(s.type)).map(s => ({addr: num(s.addr), name: s.name}))
+      .sort((a, b) => a.addr - b.addr);
+    symMap = new Map(); symSorted.forEach(s => { if (!symMap.has(s.addr)) symMap.set(s.addr, s.name); });
+  } catch (e) { symMap = new Map(); symSorted = []; }
+}
+function where(a) {
+  let lo = 0, hi = symSorted.length - 1, best = null;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (symSorted[m].addr <= a) { best = symSorted[m]; lo = m + 1; } else hi = m - 1; }
+  return best && a - best.addr < 0x10000 ? best.name + (a > best.addr ? "+$" + (a - best.addr).toString(16) : "") : "";
+}
+function renderDis() {
+  $("dis").innerHTML = dis.lines.length ? dis.lines.map(l => {
+    const bp = bpAddrs.has(l.addr), pc = l.addr === dis.pc;
+    const label = symMap && symMap.has(l.addr) ? `<div class="dl"><span class="g"></span><span class="p"></span><span class="lbl">${esc(symMap.get(l.addr))}:</span></div>` : "";
+    return label + `<div class="dl${pc ? " pc" : ""}" data-addr="${l.addr}"><span class="g${bp ? " bp" : ""}" title="${bp ? "clear" : "set"} breakpoint">●</span>` +
+      `<span class="p">${pc ? "▶" : ""}</span><span class="a">${hx(l.addr, 8)}</span><span class="b">${esc(l.bytes)}</span><span class="i">${esc(l.ins)}</span></div>`;
+  }).join("") : `<div class="hint" style="padding:4px 8px">Nothing to show: Hatari isn't running, or the address isn't valid.</div>`;
+}
+async function disAt(expr, count) {
+  const d = await H("/cpu/disasm", {addr: expr, count});
+  return (d.lines || []).map(parseLine);
+}
+// 68000 instructions are 2-10 bytes, so to page up, disassemble from a bit
+// earlier and keep the lines that land exactly on the old first address
+async function disBefore(addr, n) {
+  for (const back of [n * 4, n * 4 + 2, n * 6, n * 6 + 2, n * 2, n * 3]) {
+    const start = Math.max(0, addr - back);
+    const lines = await disAt("$" + start.toString(16), n * 3 + 4);
+    const i = lines.findIndex(l => l.addr === addr);
+    if (i > 0) return lines.slice(Math.max(0, i - n), i);
+  }
+  return [];
+}
+const disCount = () => Math.max(4, Math.min(200, parseInt($("discount").value) || 24));
+async function disGo(expr) {
+  dis.lines = await disAt(expr || $("disaddr").value || "pc", disCount());
+  renderDis();
+}
+async function disShowPc(pc) {
+  dis.pc = pc;
+  const n = disCount(), i = dis.lines.findIndex(l => l.addr === pc);
+  if (i < 0 || i > n - 4) {          // PC off the page: show it with a few lines of context above
+    const before = await disBefore(pc, 4);
+    dis.lines = before.concat(await disAt("$" + pc.toString(16), n - before.length));
+  }
+  renderDis();
+}
+$("disgo").onclick = () => guard(() => disGo());
+$("disaddr").onkeydown = (e) => { if (e.key === "Enter") $("disgo").click(); };
+$("dispc").onclick = () => guard(async () => { $("disaddr").value = "pc"; $("follow").checked = true; dis.lines = []; await disShowPc(dis.pc ?? num((await H("/cpu/regs")).regs.pc)); });
+$("disdown").onclick = () => guard(async () => {
+  if (!dis.lines.length) return disGo();
+  const last = dis.lines[dis.lines.length - 1];
+  dis.lines = (await disAt("$" + last.addr.toString(16), disCount() + 1)).slice(1);
+  $("follow").checked = false; renderDis();
+});
+$("disup").onclick = () => guard(async () => {
+  if (!dis.lines.length) return disGo();
+  const prev = await disBefore(dis.lines[0].addr, disCount());
+  if (prev.length) { dis.lines = prev; $("follow").checked = false; renderDis(); }
+});
+$("dis").onclick = (e) => {
+  if (!e.target.classList.contains("g")) return;
+  const a = +e.target.parentElement.dataset.addr;
+  act(async () => {
+    if (bpAddrs.has(a)) await api(hq("/debug/breakpoints", {index: bpAddrs.get(a)}), undefined, "DELETE");
+    else await HP("/debug/breakpoints", {addr: "$" + a.toString(16)});
+  });
+};
+$("dis").ondblclick = (e) => {
+  const row = e.target.closest(".dl");
+  if (!row || e.target.classList.contains("g")) return;
+  const a = +row.dataset.addr;
+  act(async () => { await HP("/debug/breakpoints", {addr: "$" + a.toString(16), options: "once"}); await HP("/debug/continue"); msg(`running to $${hx(a)}`); });
+};
+
+// ---- breakpoints ----
+async function loadBps() {
+  const b = await H("/debug/breakpoints");
+  const list = Array.isArray(b) ? b : (b.breakpoints || []);
+  bpAddrs = new Map();
+  list.forEach(x => { const m = /^pc\s*=\s*\$([0-9a-f]+)$/i.exec(x.expression); if (m && !x.once) bpAddrs.set(parseInt(m[1], 16), x.index); });
+  $("bps").innerHTML = list.length ? list.map(x => `<li><button class="small" data-del="${x.index}" title="remove">✕</button><span>#${x.index} ${esc(x.expression)}${x.once ? " (once)" : ""} · ${x.hits} hits</span></li>`).join("")
+    : `<li class="status">no breakpoints</li>`;
+}
+$("addbp").onclick = () => act(async () => {
+  const v = $("bp").value.trim();
+  // a condition has a comparison in it; anything else is an address expression
+  await HP("/debug/breakpoints", /[=<>!]/.test(v) ? {cond: v} : {addr: v});
+  msg("breakpoint added");
+});
+$("bp").onkeydown = (e) => { if (e.key === "Enter") $("addbp").click(); };
+$("addwatch").onclick = () => act(async () => {
+  const v = $("watch").value.trim(), s = $("watchsz").value;
+  if (!v) throw new Error("watch: give an address or symbol");
+  await HP("/debug/breakpoints", {cond: `(${v}).${s} ! (${v}).${s}`});
+  msg(`breaks when (${v}).${s} changes`);
+});
+$("watch").onkeydown = (e) => { if (e.key === "Enter") $("addwatch").click(); };
+$("bps").onclick = (e) => { const i = e.target.dataset.del; if (i !== undefined) act(() => api(hq("/debug/breakpoints", {index: i}), undefined, "DELETE")); };
+
+// ---- symbols ----
+$("symgo").onclick = () => guard(async () => {
+  const r = await api("/api/symbols?find=" + encodeURIComponent($("symq").value.trim()));
+  if (!symSorted.length && r.symbols.length) { await loadSymbols(); renderDis(); }
+  const syms = r.symbols.slice(0, 300);
+  $("syms").innerHTML = syms.length ? syms.map(s => `<div><span title="${esc(s.name)}">${esc(s.name)}</span><span class="status">${s.type} ${s.addr.replace(/^0x0*/, "$") || "$0"}</span>` +
+      `<button class="small" data-dis="${s.addr}" title="disassemble">dis</button><button class="small" data-mem="${s.addr}" title="memory">mem</button></div>`).join("") +
+      (r.symbols.length > syms.length ? `<div class="hint">… ${r.symbols.length - syms.length} more: narrow the search</div>` : "")
+    : `<div class="hint">${esc(r.note || "No matching symbols (the program may be stripped, or not started yet).")}</div>`;
+});
+$("symq").onkeydown = (e) => { if (e.key === "Enter") $("symgo").click(); };
+$("syms").onclick = (e) => {
+  const d = e.target.dataset;
+  if (d.dis) { $("disaddr").value = "$" + d.dis.replace(/^0x0*/, ""); $("follow").checked = false; guard(() => disGo()); }
+  if (d.mem) { $("addr").value = "$" + d.mem.replace(/^0x0*/, ""); guard(readMem); }
+};
+
+// ---- memory ----
+let memPrev = new Map(), memAddr = null;
+async function readMem() {
+  const expr = $("addr").value.trim() || "pc";
+  const len = Math.max(16, Math.min(4096, parseInt($("len").value) || 256));
+  const r = await H("/mem", {addr: expr, len});
+  const bytes = ((r.hex || "").replace(/\s+/g, "").match(/../g) || []).map(h => parseInt(h, 16));
+  const base = num(r.addr ?? "0") || 0, w = base + bytes.length > 0xffffff ? 8 : 6;
+  const rows = [];
+  for (let i = 0; i < bytes.length; i += 16) {
+    let h = "", a = "";
+    for (let j = 0; j < 16; j++) {
+      const k = i + j;
+      if (k >= bytes.length) { h += "   "; continue; }
+      const b = bytes[k], old = memPrev.get(base + k), ch = old !== undefined && old !== b;
+      const t = hx(b, 2), c = b >= 32 && b < 127 ? esc(String.fromCharCode(b)) : ".";
+      h += (ch ? `<span class="chg">${t}</span>` : t) + (j === 7 ? "  " : " ");
+      a += ch ? `<span class="chg">${c}</span>` : c;
+    }
+    rows.push(`<span class="ad">${hx(base + i, w)}</span>  ${h} <span class="as">${a}</span>`);
+  }
+  $("mem").innerHTML = rows.join("\n") || `<span class="hint">no bytes</span>`;
+  memPrev = new Map(bytes.map((b, k) => [base + k, b]));
+  memAddr = base;
+  $("memstat").textContent = `${expr} = $${hx(base, w)} · ${bytes.length} bytes`;
+  if (document.activeElement !== $("wraddr")) $("wraddr").value = "$" + hx(base, w);
+}
+$("peek").onclick = () => guard(readMem);
+$("addr").onkeydown = (e) => { if (e.key === "Enter") $("peek").click(); };
+const memPage = (dir) => guard(async () => {
+  if (memAddr === null) return readMem();
+  const len = parseInt($("len").value) || 256;
+  $("addr").value = "$" + Math.max(0, memAddr + dir * len).toString(16);
+  await readMem();
+});
+$("memprev").onclick = () => memPage(-1);
+$("memnext").onclick = () => memPage(1);
+$("write").onclick = () => act(async () => {
+  const hex = $("wrhex").value.replace(/\s+/g, "");
+  if (!/^([0-9a-f]{2})+$/i.test(hex)) throw new Error("write: hex bytes, e.g. 4e71 4e71");
+  await HP("/mem", {addr: $("wraddr").value.trim(), hex});
+  msg(`wrote ${hex.length / 2} bytes`);
+  if (memAddr !== null) await readMem();
+});
+
+// ---- the debugger views: refreshed on every new stop ----
+async function refreshDebug(st) {
+  const stopped = st.state === "stopped";
+  if (symMap === null && stopped) await loadSymbols();
+  const r = (await H("/cpu/regs")).regs || {};
+  showRegs(r, stopped);
+  if ($("follow").checked) await disShowPc(num(r.pc));
+  else { dis.pc = num(r.pc); renderDis(); }
+  await loadBps();
+  renderDis();
+  if ($("memauto").checked && memAddr !== null && stopped) await readMem();
+}
+
+async function refresh() {
   let st;
-  try { st = await H("/status"); } catch (e) { setUp(false); $("stat").textContent = ""; return; }
+  try { st = await H("/status"); } catch (e) { setUp(false); $("stat").textContent = ""; $("stop").textContent = ""; return; }
   setUp(true);
-  $("screen").src = hq("/screen", {t: Date.now()});
+  if ($("live").checked || st.state !== "running") $("screen").src = hq("/screen", {t: Date.now()});
   const tos = st.tos ? ` · TOS ${st.tos.version ?? ""}${st.tos.emutos ? " (EmuTOS)" : ""}` : "";
   $("stat").textContent = `${st.machine ?? ""} · ${st.state} · frame ${st.frame} · PC ${st.pc}${tos}`;
   $("ff").classList.toggle("on", !!st.fast_forward);
-  $("stop").textContent = st.state === "stopped" && st.stop ? `stopped: ${st.stop.reason} at ${st.stop.pc}` : st.state;
+  const fn = st.state === "stopped" && symSorted.length ? where(num(st.pc)) : "";
+  $("stop").textContent = st.state === "stopped" && st.stop ? `stopped: ${st.stop.reason} at ${st.pc}${fn ? " in " + fn : ""}` : st.state;
   const con = await H("/console", {since: conNext});
   if (con.text) { $("console").textContent += con.text.replace(/\r/g, ""); $("console").scrollTop = 1e9; }
   conNext = con.next ?? conNext;
-  if (!full && st.state === "running") return;
-  const r = (await H("/cpu/regs")).regs || {};
-  const keys = ["pc", "sr", ...[0,1,2,3,4,5,6,7].map(i => "d" + i), ...[0,1,2,3,4,5,6,7].map(i => "a" + i), "usp", "isp"];
-  $("regs").textContent = keys.filter(k => r[k] !== undefined).map(k => `${k.toUpperCase().padEnd(3)} ${r[k]}`).join("\n");
-  const d = await H("/cpu/disasm", {count: 14});
-  $("dis").textContent = (d.lines || []).map(l => l.text).join("\n");
-  const b = await H("/debug/breakpoints");
-  const list = Array.isArray(b) ? b : (b.breakpoints || []);
-  $("bps").innerHTML = list.length ? list.map(x => `<li><button data-del="${x.index}">✕</button>#${x.index} ${x.expression} · ${x.hits} hits</li>`).join("")
-    : `<li class="status">no breakpoints</li>`;
+  const key = `${st.state}:${st.stop ? st.stop.count : ""}:${st.pc}`;
+  // debugger views: on each new stop (break, step, breakpoint) and when the state changes
+  if (key !== stopKey && (st.state !== "running" || lastState !== "running")) await refreshDebug(st);
+  else if (st.state === "running" && lastState !== "running") $("regs").classList.add("stale");
+  stopKey = key; lastState = st.state;
 }
 
+// ---- header and screen controls ----
 $("games").onchange = showGame;
-$("build").onclick = () => act(async () => { msg("building…"); const r = await api(`/api/projects/${$("games").value}/build`, {}); $("out").textContent = r.output; msg(r.ok ? "build OK" : "build FAILED", !r.ok); await loadGames(); });
-$("run").onclick = () => act(async () => { msg("starting…"); conNext = 0; $("console").textContent = ""; const r = await api(`/api/projects/${$("games").value}/run`, {}); $("out").textContent = r.output; msg(r.ok ? "running" : "failed", !r.ok); await loadGames(); });
-$("desktop").onclick = () => act(async () => { msg("starting…"); conNext = 0; $("console").textContent = ""; const r = await api("/api/hatari/start", {machine: $("machine").value}); $("out").textContent = r.output; msg(r.ok ? "desktop started" : "failed", !r.ok); });
+$("build").onclick = () => act(async () => { msg("building…"); showTab("game"); const r = await api(`/api/projects/${$("games").value}/build`, {}); $("out").textContent = r.output; msg(r.ok ? "build OK" : "build FAILED", !r.ok); await loadGames(); });
+$("run").onclick = () => act(async () => { msg("starting…"); conNext = 0; $("console").textContent = ""; memPrev = new Map(); symMap = null; symSorted = []; const r = await api(`/api/projects/${$("games").value}/run`, {}); $("out").textContent = r.output; msg(r.ok ? "running" : "failed", !r.ok); await loadGames(); });
+$("desktop").onclick = () => act(async () => { msg("starting…"); symMap = null; symSorted = []; conNext = 0; $("console").textContent = ""; const r = await api("/api/hatari/start", {machine: $("machine").value}); $("out").textContent = r.output; msg(r.ok ? "desktop started" : "failed", !r.ok); });
 $("quit").onclick = () => act(async () => { const r = await api("/api/hatari/stop", {}); msg(r.ok ? "stopped" : r.output, !r.ok); });
 document.querySelectorAll("[data-run]").forEach(b => b.onclick = () => act(() => HP("/emu/run", {frames: b.dataset.run, pause: 1})));
 $("pause").onclick = () => act(() => HP("/emu/pause"));
@@ -273,33 +601,15 @@ $("screen").onclick = (e) => {
   if (x < 0 || y < 0 || x >= img.naturalWidth || y >= img.naturalHeight) return;
   act(async () => { await HP("/input/click", {x, y}); msg(`clicked ${x},${y}`); });
 };
+// stepping: the reply is the new stop, and refresh() redraws the views from it
 $("brk").onclick = () => act(() => HP("/debug/break"));
 $("cont").onclick = () => act(() => HP("/debug/continue"));
 $("step").onclick = () => act(() => HP("/debug/step", {count: 1}));
+$("stepn").onclick = () => act(() => HP("/debug/step", {count: Math.max(1, parseInt($("stepcount").value) || 1)}));
 $("next").onclick = () => act(() => HP("/debug/next"));
-$("addbp").onclick = () => act(async () => {
-  const v = $("bp").value.trim();
-  // a condition has a comparison in it; anything else is an address expression
-  await HP("/debug/breakpoints", /[=<>!]/.test(v) ? {cond: v} : {addr: v});
-  msg("breakpoint added");
-});
-$("bp").onkeydown = (e) => { if (e.key === "Enter") $("addbp").click(); };
-$("bps").onclick = (e) => { const i = e.target.dataset.del; if (i !== undefined) act(() => api(hq("/debug/breakpoints", {index: i}), undefined, "DELETE")); };
-$("dbgrun").onclick = () => act(async () => { const r = await HP("/debug/cmd", {cmd: $("dbg").value}); $("rawout").textContent = r.output ?? JSON.stringify(r, null, 1); });
+$("out1").onclick = () => act(() => HP("/debug/next", {type: "subreturn"}));
+$("dbgrun").onclick = () => act(async () => { const r = await HP("/debug/cmd", {cmd: $("dbg").value}); $("dbgout").hidden = false; $("dbgout").textContent = r.output ?? JSON.stringify(r, null, 1); });
 $("dbg").onkeydown = (e) => { if (e.key === "Enter") $("dbgrun").click(); };
-$("peek").onclick = () => act(async () => {
-  const r = await H("/mem", {addr: $("addr").value || "pc", len: $("len").value || 256});
-  const bytes = (r.hex || "").replace(/\s+/g, "").match(/../g) || [];
-  const base = parseInt(r.addr ?? "0", 16) || 0;
-  const rows = [];
-  for (let i = 0; i < bytes.length; i += 16) {
-    const chunk = bytes.slice(i, i + 16);
-    const ascii = chunk.map(h => { const c = parseInt(h, 16); return c >= 32 && c < 127 ? String.fromCharCode(c) : "."; }).join("");
-    rows.push(`${(base + i).toString(16).toUpperCase().padStart(6, "0")}  ${chunk.join(" ").padEnd(47)}  ${ascii}`);
-  }
-  $("mem").textContent = rows.join("\n");
-});
-$("addr").onkeydown = (e) => { if (e.key === "Enter") $("peek").click(); };
 $("raw").onclick = () => act(async () => {
   const p = $("rawp").value.trim() || "/status";
   const r = await fetch("/api/hatari" + (p.startsWith("/") ? p : "/" + p), {method: $("rawm").value});
@@ -308,8 +618,8 @@ $("raw").onclick = () => act(async () => {
 });
 $("rawp").onkeydown = (e) => { if (e.key === "Enter") $("raw").click(); };
 attachKeys($("screenbox"), {joystick: () => $("joymode").checked, onError: (e) => msg(e.message, true)});
-setInterval(() => { if ($("live").checked && !busy) { busy = true; refresh(false).finally(() => { busy = false; }); } }, 500);
-guard(async () => { await loadGames(); await refresh(true); });
+setInterval(() => { if (!busy) { busy = true; refresh().catch(e => msg(e.message, true)).finally(() => { busy = false; }); } }, 500);
+guard(async () => { await loadGames(); await refresh(); });
 </script>
 </body>
 </html>

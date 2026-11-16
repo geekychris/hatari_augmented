@@ -17,6 +17,8 @@ ports (geekychris/atari_st_games) built and run from it.
     /api/projects/{id}/readme           its README.md
     /api/arcade                         {"games": [...]}: the projects that are games
     /api/arcade/play           POST     {"game": id, "build": true}: same as .../run
+    /api/symbols?find=X                 the CPU symbols whose name contains X (Hatari debugger
+                                        "symbols name X"): {"symbols": [{"addr", "type", "name"}]}
     /api/hatari/start          POST     {"machine": "ste"}: Hatari at the EmuTOS desktop
     /api/hatari/stop           POST     quit the Hatari on the agent port
     /api/hatari/<path>                  passed to the agent API (doc/agent-api.md), e.g.
@@ -36,6 +38,7 @@ import subprocess
 import sys
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 import webbrowser
 from http import HTTPStatus
@@ -51,6 +54,7 @@ import launcher as games  # noqa: E402  (tools/games/launcher.py)
 RUN_SCRIPT = games.RUN_SCRIPT
 DESKTOP_TOS = os.path.join(REPO, games.DEFAULT_TOS["other"])
 MACHINES = ("st", "megast", "ste", "megaste", "tt", "falcon")
+GST2ASCII = os.path.join(REPO, "build", "tools", "debugger", "gst2ascii")   # PRG symbols -> nm format
 HATARI_BINS = ("build/src/Hatari.app/Contents/MacOS/Hatari", "build/src/hatari")
 STATIC = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
           ".css": "text/css; charset=utf-8"}
@@ -300,6 +304,78 @@ class Bench:
                 raise RuntimeError("Hatari did not start")
         return self._logged(go)
 
+    SYM_LINE = re.compile(r"^(0x[0-9a-fA-F]+)\s+(\S)\s+(\S.*)$")
+    SYM_COUNT = re.compile(r"(\d+) CPU symbols \(of (\d+)\)")
+
+    def debug_cmd(self, cmd):
+        status, _, out = self.agent("POST", "/debug/cmd", urllib.parse.urlencode({"cmd": cmd}).encode())
+        d = json.loads(out)
+        if status != 200:
+            raise RuntimeError(d.get("error", "debugger error %d" % status))
+        return d.get("output", "")
+
+    def program_symbols(self):
+        """[(addr, type, name)] of the program started from here, read from its PRG with
+        gst2ascii and moved to where it's loaded (the debugger's TEXT); None when that
+        isn't possible. The debugger's own listing pages after a screenful."""
+        if not self.playing:
+            return None
+        try:
+            _, g, _ = self.find(self.playing)
+        except (KeyError, OSError):
+            return None
+        prg = os.path.join(g.build_dir, g.program)
+        tool = GST2ASCII
+        if not (os.path.exists(prg) and os.access(tool, os.X_OK)):
+            return None
+        m = re.search(r"\$([0-9a-fA-F]+) \(hex\)", self.debug_cmd("e TEXT"))
+        if not m:
+            return None
+        text = int(m.group(1), 16)
+        key = (prg, os.path.getmtime(prg))
+        if getattr(self, "_symcache", (None,))[0] != key:
+            p = subprocess.run([tool, prg], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+            rel = []
+            for line in p.stdout.splitlines():
+                f = line.split(None, 2)
+                if len(f) == 3 and f[0].startswith("0x"):
+                    rel.append((int(f[0], 16), f[1], f[2]))
+            self._symcache = (key, rel)
+        return [(text + a, t, n) for a, t, n in self._symcache[1]]
+
+    def symbols(self, find=""):
+        """Symbols containing find: the running program's (from its PRG), else whatever the
+        Hatari debugger has loaded ("symbols prg" loads the program's if nothing is)."""
+        prog = self.program_symbols()
+        if prog is not None:
+            syms = sorted(({"addr": "0x%08x" % a, "type": t, "name": n} for a, t, n in prog if find in n),
+                          key=lambda x: x["name"])
+            return {"ok": True, "symbols": syms, "total": len(prog), "more": False, "source": "prg"}
+
+        def ask():
+            status, _, out = self.agent("POST", "/debug/cmd", urllib.parse.urlencode(
+                {"cmd": ("symbols name " + find).strip()}).encode())
+            if status != 200:
+                raise RuntimeError(json.loads(out).get("error", "debugger error %d" % status))
+            return json.loads(out).get("output", "")
+        text = ask()
+        loaded = None
+        if "symbols" not in text or "no symbols" in text.lower() or "(of 0)" in text:
+            _, _, out = self.agent("POST", "/debug/cmd", b"cmd=symbols+prg")
+            loaded = json.loads(out).get("output", "").strip()
+            text = ask()
+        syms = []
+        for line in text.splitlines():
+            m = self.SYM_LINE.match(line.strip())
+            if m:
+                syms.append({"addr": m.group(1), "type": m.group(2), "name": m.group(3)})
+        m = self.SYM_COUNT.search(text)
+        res = {"ok": True, "symbols": syms, "total": int(m.group(2)) if m else len(syms),
+               "more": "q to exit" in text, "source": "debugger"}
+        if not syms and loaded:
+            res["note"] = loaded.splitlines()[-1]
+        return res
+
     def stop(self):
         def go(log):
             if not self.launcher().stop(log):
@@ -379,6 +455,17 @@ class Handler(BaseHTTPRequestHandler):
                 if not a.get("game"):
                     raise ValueError('body: {"game": id}')
                 return self.send(200, b.run(a["game"], build=a.get("build", True) is not False))
+            if rest == ["symbols"] and method == "GET":
+                q = urllib.parse.parse_qs(url.query)
+                find = (q.get("find") or [""])[0].strip()
+                if not re.fullmatch(r"[\w.$]*", find):
+                    raise ValueError("find: a symbol name or part of one")
+                try:
+                    return self.send(200, b.symbols(find))
+                except OSError as e:
+                    return self.error(502, "Hatari isn't answering on port %d (%s)" % (b.port, getattr(e, "reason", e)))
+                except RuntimeError as e:
+                    return self.error(409, str(e))
             if len(rest) == 3 and rest[0] == "projects" and method == "GET" and rest[2] in ("picture", "readme"):
                 _, g, _ = b.find(rest[1])
                 if rest[2] == "picture":
