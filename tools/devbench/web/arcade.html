@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ST Arcade</title>
+<style>
+:root {
+  --bg: #f4f4f1; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #d9d9d2;
+  --accent: #c8102e; --accent2: #0a5bd7; --ok: #1f8a3b; --warn: #a86400; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #151514; --panel: #1f1f1d; --ink: #ecece6; --muted: #9a9a92; --line: #33332f;
+          --accent: #ff5a4e; --accent2: #5aa0ff; --ok: #4cc46b; --warn: #e0a040; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px;
+         border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; }
+header h1 { font-size: 16px; margin: 0 12px 0 0; display: flex; align-items: center; gap: 8px; }
+header h1 i { display: inline-flex; gap: 2px; align-items: flex-end; height: 14px; }
+header h1 i b { width: 4px; background: var(--accent); border-radius: 1px; }
+header h1 i b:nth-child(1), header h1 i b:nth-child(3) { height: 10px; } header h1 i b:nth-child(2) { height: 14px; }
+header a { color: var(--accent2); text-decoration: none; } header a:hover { text-decoration: underline; }
+.grow { flex: 1; }
+.status { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 4px; }
+.dot.up { background: var(--ok); }
+.err { color: var(--accent); }
+button, select, input { font: inherit; padding: 5px 9px; border: 1px solid var(--line); border-radius: 5px;
+  background: var(--bg); color: var(--ink); }
+button { cursor: pointer; } button:hover { border-color: var(--accent2); }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--accent2); color: #fff; border-color: var(--accent2); }
+.wrap { padding: 16px; max-width: 1400px; margin: 0 auto; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.filters input[type=search] { flex: 1; min-width: 160px; max-width: 320px; }
+/* the player */
+#player { display: grid; grid-template-columns: minmax(0, 640px) minmax(0, 1fr); gap: 16px; background: var(--panel);
+          border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 16px; }
+@media (max-width: 900px) { #player { grid-template-columns: minmax(0, 1fr); } }
+.screenbox { position: relative; background: #000; border-radius: 4px; aspect-ratio: 16/10; display: grid; place-items: center;
+             overflow: hidden; outline: none; }
+.screenbox:focus { box-shadow: 0 0 0 3px var(--accent2); }
+.screenbox img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; display: block; }
+.screenbox .hint { position: absolute; bottom: 6px; left: 0; right: 0; text-align: center; font-size: 12px; color: #ddd;
+                   background: rgba(0,0,0,.55); padding: 3px; pointer-events: none; }
+.screenbox:focus .hint { display: none; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; }
+#player h2 { margin: 0 0 4px; font-size: 18px; }
+pre { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 5px;
+  padding: 8px; margin: 0; overflow: auto; max-height: 180px; white-space: pre-wrap; word-break: break-word; }
+/* the games */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+.card .pic { background: #000; aspect-ratio: 16/10; display: grid; place-items: center; color: #8a8a84; font-size: 12px; }
+.card .pic img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; display: block; }
+.card .body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.card h3 { margin: 0; font-size: 15px; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.tag { font-size: 11px; font-weight: normal; padding: 1px 6px; border-radius: 9px; border: 1px solid var(--line); color: var(--muted); }
+.tag.built { color: var(--ok); border-color: var(--ok); }
+.desc { font-size: 13px; color: var(--ink); margin: 0; }
+details { font-size: 12px; color: var(--muted); }
+details pre { margin-top: 4px; max-height: none; }
+.reason { font-size: 12px; color: var(--warn); }
+.reason.bad { color: var(--accent); }
+.card .actions { display: flex; gap: 6px; align-items: center; margin-top: auto; padding-top: 4px; flex-wrap: wrap; }
+.card .actions a { font-size: 12px; color: var(--accent2); margin-left: auto; }
+.empty { color: var(--muted); padding: 20px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1><i><b></b><b></b><b></b></i>ST Arcade</h1>
+  <span class="status"><span class="dot" id="updot"></span><span id="uptext">Hatari: …</span></span>
+  <span class="grow"></span>
+  <span class="status err" id="msg" role="status"></span>
+  <a href="/">DevBench (debugger, memory) →</a>
+</header>
+<div class="wrap">
+  <section id="player" hidden>
+    <div>
+      <div class="screenbox" id="screenbox" tabindex="0" title="click here, then play with the keyboard">
+        <img id="screen" alt="the running game">
+        <div class="hint">Click the screen to play with your keyboard</div>
+      </div>
+      <div class="row">
+        <label title="cursor keys and Space / Ctrl drive the joystick in port 1"><input type="checkbox" id="joymode"> cursor keys + Space = joystick</label>
+        <span class="grow"></span>
+        <button id="pause">Pause</button><button id="resume">Resume</button>
+        <button id="reset">Reset</button>
+        <button id="stop">Stop</button>
+      </div>
+    </div>
+    <div>
+      <h2 id="nowtitle">Hatari</h2>
+      <div class="status" id="nowstat"></div>
+      <p class="desc" id="nowdesc"></p>
+      <details open><summary>Controls</summary><pre id="nowcontrols"></pre></details>
+      <div class="row"><a id="devlink" href="/">Open in the DevBench: console, registers, breakpoints, memory →</a></div>
+      <details><summary>Build / start output</summary><pre id="out"></pre></details>
+    </div>
+  </section>
+
+  <div class="filters">
+    <input type="search" id="q" placeholder="Search games" aria-label="search games">
+    <select id="machine" aria-label="machine">
+      <option value="">All machines</option><option value="st">Atari ST</option><option value="ste">Atari STE</option>
+      <option value="falcon">Falcon030</option>
+    </select>
+    <label><input type="checkbox" id="others"> demos and shared code too</label>
+    <span class="status" id="count"></span>
+  </div>
+  <div class="cards" id="cards"></div>
+</div>
+<script src="/keys.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+let projects = [], playing = null, busy = false, up = false;
+
+async function api(path, body, method) {
+  const r = await fetch(path, {method: method || (body !== undefined ? "POST" : "GET"),
+    headers: {"Content-Type": "application/json"}, body: body !== undefined ? JSON.stringify(body) : undefined});
+  const t = r.headers.get("content-type") || "";
+  const d = t.includes("json") ? await r.json() : await r.text();
+  if (!r.ok || d.ok === false) throw new Error((d && (d.error || d.output)) || r.statusText);
+  return d;
+}
+function msg(t, bad) { $("msg").textContent = t || ""; $("msg").className = "status" + (bad ? " err" : ""); }
+
+function card(p) {
+  const tags = `<span class="tag">${esc(p.machine_name)}</span>` +
+    (p.kind !== "game" ? `<span class="tag">${p.kind}</span>` : "") +
+    (p.built ? `<span class="tag built">built</span>` : "");
+  const reason = p.reason ? `<div class="reason${p.playable ? "" : " bad"}">${esc(p.reason)}</div>` : "";
+  const controls = p.controls ? `<details><summary>Controls</summary><pre>${esc(p.controls)}</pre></details>` : "";
+  const runnable = p.kind !== "library";
+  return `<article class="card" data-id="${esc(p.id)}">
+    <div class="pic">${p.picture ? `<img loading="lazy" src="${p.picture}" alt="${esc(p.title)}">` : "no picture"}</div>
+    <div class="body">
+      <h3>${esc(p.title)} ${tags}</h3>
+      <p class="desc">${esc(p.description)}</p>
+      ${controls}${reason}
+      <div class="actions">
+        ${runnable ? `<button data-build="${esc(p.id)}">Build</button>
+        <button class="primary" data-play="${esc(p.id)}" ${p.playable ? "" : "disabled"}>Play</button>` : ""}
+        ${p.readme ? `<a href="${p.readme}" target="_blank" rel="noopener">README</a>` : ""}
+      </div>
+    </div></article>`;
+}
+
+function render() {
+  const q = $("q").value.trim().toLowerCase(), m = $("machine").value, others = $("others").checked;
+  const list = projects.filter(p => (others || p.kind === "game") && (!m || p.machine === m) &&
+    (!q || (p.title + " " + p.description + " " + p.id).toLowerCase().includes(q)));
+  $("cards").innerHTML = list.length ? list.map(card).join("") : `<div class="empty">No games match.</div>`;
+  const n = projects.filter(p => p.kind === "game").length;
+  $("count").textContent = `${list.length} shown · ${n} games`;
+}
+
+async function load() {
+  projects = await api("/api/projects");
+  render();
+  showNow();
+}
+
+function showNow() {
+  const p = projects.find(p => p.id === playing);
+  $("nowtitle").textContent = p ? p.title : "Hatari";
+  $("nowdesc").textContent = p ? p.description : "";
+  $("nowcontrols").textContent = p && p.controls ? p.controls : "—";
+  $("devlink").href = p ? "/?game=" + encodeURIComponent(p.id) : "/";
+}
+
+// joystick-only games get joystick mode by default: their controls name the
+// joystick but not the cursor keys
+function joyDefault(p) {
+  const c = (p && p.controls || "").toLowerCase();
+  return c.includes("joystick") && !c.includes("cursor") && !c.includes("arrow");
+}
+
+async function action(id, kind) {
+  if (busy) return;
+  busy = true;
+  const p = projects.find(p => p.id === id);
+  document.querySelectorAll("[data-build],[data-play]").forEach(b => b.disabled = true);
+  try {
+    if (kind === "build") {
+      msg(`building ${p.title}…`);
+      const r = await fetch(`/api/projects/${encodeURIComponent(id)}/build`, {method: "POST"}).then(r => r.json());
+      $("out").textContent = r.output || r.error || "";
+      msg(r.ok ? `${p.title} built` : `build of ${p.title} failed (see output)`, !r.ok);
+      if (!r.ok) { $("player").hidden = false; $("out").parentElement.open = true; }
+    } else {
+      msg(`starting ${p.title}…`);
+      const r = await fetch("/api/arcade/play", {method: "POST", headers: {"Content-Type": "application/json"},
+                                                 body: JSON.stringify({game: id})}).then(r => r.json());
+      $("out").textContent = r.output || r.error || "";
+      if (!r.ok) throw new Error(`${p.title} didn't start (see output)`);
+      playing = id;
+      $("joymode").checked = joyDefault(p);
+      msg("");
+      showNow();
+      await poll();
+      window.scrollTo({top: 0, behavior: "smooth"});
+      $("screenbox").focus({preventScroll: true});
+    }
+    await load();
+  } catch (e) {
+    msg(e.message, true);
+    $("player").hidden = false; $("out").parentElement.open = true;
+  } finally {
+    busy = false;
+    render();
+  }
+}
+
+$("cards").onclick = (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  if (b.dataset.play) action(b.dataset.play, "play");
+  if (b.dataset.build) action(b.dataset.build, "build");
+};
+["q", "machine", "others"].forEach(id => $(id).addEventListener("input", render));
+
+const hp = (path) => fetch("/api/hatari" + path, {method: "POST"}).then(r => r.ok || r.json().then(d => msg(d.error, true)));
+$("pause").onclick = () => hp("/emu/pause");
+$("resume").onclick = () => hp("/emu/resume");
+$("reset").onclick = () => hp("/emu/reset?type=cold");
+$("stop").onclick = async () => {
+  try { await api("/api/hatari/stop", {}); playing = null; }
+  catch (e) { msg(e.message, true); }
+  poll();
+};
+attachKeys($("screenbox"), {joystick: () => $("joymode").checked, onError: (e) => msg(e.message, true)});
+$("screenbox").addEventListener("mousedown", () => $("screenbox").focus());
+
+// the live screen: the next frame is fetched when the last one has arrived
+let frameBusy = false;
+function nextFrame() {
+  if (!up || frameBusy || document.hidden) return;
+  frameBusy = true;
+  const img = new Image();
+  img.onload = () => { $("screen").src = img.src; frameBusy = false; };
+  img.onerror = () => { frameBusy = false; };
+  img.src = "/api/hatari/screen?t=" + Date.now();
+}
+setInterval(nextFrame, 100);
+
+async function poll() {
+  let st = null;
+  try {
+    const r = await fetch("/api/hatari/status");
+    if (r.ok) st = await r.json();
+    const h = await (await fetch("/api/health")).json();
+    if (h.playing !== playing) { playing = h.playing; showNow(); }
+  } catch (e) {}
+  up = !!st;
+  $("updot").className = "dot" + (up ? " up" : "");
+  $("uptext").textContent = up ? "Hatari running" : "Hatari stopped";
+  $("player").hidden = !up && !$("out").textContent;
+  $("nowstat").textContent = st ? `${st.machine ?? ""} · ${st.state} · frame ${st.frame}` : "Hatari isn't running";
+}
+setInterval(poll, 1500);
+load().then(poll).catch(e => msg(e.message, true));
+</script>
+</body>
+</html>

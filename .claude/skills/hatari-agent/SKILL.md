@@ -21,6 +21,13 @@ get freshly built programs in), `--natfeats on` so programs can print to
 `/console`, and `--fast-forward on` to boot quickly (switch it off with
 `POST /emu/fastforward on=0` before timing-sensitive input).
 
+The ST DevBench (`tools/devbench/run.sh`, :3520) puts this in a browser for the
+user: `/arcade` lists every atari_st_games game with Build and Play, `/` is the
+dev page. To start a game the way the page does: `curl -XPOST
+localhost:3520/api/arcade/play -d '{"game": "rock_blaster"}'`, then use the
+agent API directly (or through `/api/hatari/<path>`). It shares port 7777 with
+anything else you start, so check `/status` first if the user may be playing.
+
 ## Core loop: act, advance time, observe
 
 1. Act: `/input/*`, `/media/*`, `/roms/select`, `/debug/*`.

@@ -30,6 +30,8 @@ section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; 
              display: flex; justify-content: space-between; align-items: center; }
 section h2 small { text-transform: none; letter-spacing: 0; font-weight: normal; }
 .screenbox { position: relative; background: #000; border-radius: 4px; aspect-ratio: 16/10; display: grid; place-items: center; overflow: hidden; }
+.screenbox:focus { box-shadow: 0 0 0 3px var(--accent2); outline: none; }
+.gamepic { max-width: 220px; width: 100%; image-rendering: pixelated; border-radius: 4px; float: right; margin: 0 0 8px 10px; }
 .screen { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; display: block; cursor: crosshair; }
 .screenbox .empty { position: absolute; color: #8a8a84; font-size: 13px; text-align: center; padding: 20px; }
 .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; }
@@ -74,12 +76,14 @@ pre { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 
   <button id="desktop">Start desktop</button>
   <button id="quit">Stop Hatari</button>
   <span class="status" id="msg"></span>
+  <span style="flex:1"></span>
+  <a href="/arcade" style="color:var(--accent2);text-decoration:none">Arcade →</a>
 </header>
 <main>
   <div>
     <section>
       <h2>Screen <small class="status" id="stat"></small></h2>
-      <div class="screenbox">
+      <div class="screenbox" id="screenbox" tabindex="0" title="focus the screen (Tab, or click with click-through off) to type on the ST keyboard">
         <img id="screen" class="screen" alt="emulated screen" hidden>
         <div class="empty" id="noscreen">Hatari isn't running. Run a game, or start the desktop.</div>
       </div>
@@ -90,6 +94,10 @@ pre { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 
         <button id="warm">Warm reset</button><button id="cold">Cold reset</button>
         <label><input type="checkbox" id="live" checked> live</label>
         <label title="clicking the screen clicks there in the emulator"><input type="checkbox" id="clicks" checked> click-through</label>
+      </div>
+      <div class="row status">
+        Keyboard: while the screen has focus (blue ring) your keys are held down on the ST as long as you hold them.
+        <label title="cursor keys and Space / Ctrl drive the joystick in port 1"><input type="checkbox" id="joymode"> cursor keys + Space = joystick</label>
       </div>
       <div class="row">
         <input id="key" class="narrow" placeholder="key: space, ctrl+z, f1">
@@ -111,6 +119,7 @@ pre { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 
     </section>
     <section>
       <h2>Game</h2>
+      <img id="gamepic" class="gamepic" alt="" hidden>
       <div id="gameinfo" class="desc">—</div>
       <pre id="out" style="margin-top:8px; max-height:200px"></pre>
     </section>
@@ -157,6 +166,7 @@ pre { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 
     </section>
   </div>
 </main>
+<script src="/keys.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const hex = (v) => typeof v === "number" ? "$" + v.toString(16).toUpperCase() : (v ?? "");
@@ -184,13 +194,22 @@ async function act(fn) { if (busy) return; busy = true; await guard(async () => 
 
 async function loadGames() {
   games = await api("/api/projects");
-  $("games").innerHTML = games.map(g => `<option value="${g.id}">${g.title} (${g.machine_name})${g.built ? "" : " · not built"}</option>`).join("");
+  const cur = $("games").value || new URLSearchParams(location.search).get("game");
+  const opt = (g) => `<option value="${g.id}"${g.playable ? "" : " disabled"}>${g.title} (${g.machine_name})${g.built ? "" : " · not built"}</option>`;
+  const others = games.filter(g => g.kind !== "game" && g.kind !== "library");
+  $("games").innerHTML = `<optgroup label="Games">${games.filter(g => g.kind === "game").map(opt).join("")}</optgroup>` +
+    (others.length ? `<optgroup label="Demos and tools">${others.map(opt).join("")}</optgroup>` : "");
+  if (cur && games.some(g => g.id === cur)) $("games").value = cur;
   showGame();
 }
 function showGame() {
   const g = games.find(g => g.id === $("games").value);
   $("gameinfo").textContent = g ? `${g.title} · ${g.machine_name} · C:\\${g.program}${g.built ? "" : " (not built)"}\n\n${g.description}` +
-    (g.controls ? `\n\nControls\n${g.controls}` : "") : "No games: is atari_st_games checked out next to hatari_augmented?";
+    (g.controls ? `\n\nControls\n${g.controls}` : "") + (g.reason ? `\n\n${g.reason}` : "")
+    : "No games: is atari_st_games checked out next to hatari_augmented? (--games DIR or $ATARI_GAMES_DIR)";
+  $("gamepic").hidden = !(g && g.picture);
+  if (g && g.picture) $("gamepic").src = g.picture;
+  if (g) $("joymode").checked = (g.controls || "").toLowerCase().includes("joystick") && !/cursor|arrow/i.test(g.controls);
 }
 
 function setUp(isUp) {
@@ -288,6 +307,7 @@ $("raw").onclick = () => act(async () => {
   $("rawout").textContent = t.includes("json") ? JSON.stringify(await r.json(), null, 1) : `${r.status} ${t} (${(await r.blob()).size} bytes)`;
 });
 $("rawp").onkeydown = (e) => { if (e.key === "Enter") $("raw").click(); };
+attachKeys($("screenbox"), {joystick: () => $("joymode").checked, onError: (e) => msg(e.message, true)});
 setInterval(() => { if ($("live").checked && !busy) { busy = true; refresh(false).finally(() => { busy = false; }); } }, 500);
 guard(async () => { await loadGames(); await refresh(true); });
 </script>
