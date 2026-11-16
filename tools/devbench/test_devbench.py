@@ -58,6 +58,26 @@ class DevBenchTest(unittest.TestCase):
         game = os.path.join(cls.tmp.name, "lander", "build")
         os.makedirs(game)
         open(os.path.join(game, "LANDER.PRG"), "wb").close()
+        docs = os.path.join(cls.tmp.name, "lander", "docs")
+        os.makedirs(docs)
+        with open(os.path.join(docs, "title.png"), "wb") as f:
+            f.write(b"\x89PNG lander")
+        with open(os.path.join(cls.tmp.name, "lander", "README.md"), "w") as f:
+            f.write("# Lander\n\nLand it gently.\n")
+        # not in games.ini: a demo with a Makefile, shared code (.mk only), and assets
+        demo = os.path.join(cls.tmp.name, "gemdemo")
+        os.makedirs(demo)
+        with open(os.path.join(demo, "Makefile"), "w") as f:
+            f.write("OUT = build\nPRG = $(OUT)/GEMDEMO.PRG\nall: $(PRG)\n\t@echo built gemdemo\n")
+        with open(os.path.join(demo, "README.md"), "w") as f:
+            f.write("# GEMDEMO: a VDI showcase\n\n<img src=x>\n\nA small [GEM](http://x) program.\nTwo lines.\n\nMore.\n")
+        menu = os.path.join(cls.tmp.name, "menu")
+        os.makedirs(menu)
+        with open(os.path.join(menu, "Makefile"), "w") as f:
+            f.write("NAME = LAUNCHER\nMACHINE = ste\ninclude ../lib/port.mk\ndrive:\n\t@echo drive\n")
+        os.makedirs(os.path.join(cls.tmp.name, "lib"))
+        open(os.path.join(cls.tmp.name, "lib", "port.mk"), "w").close()
+        os.makedirs(os.path.join(cls.tmp.name, "assets"))
         cls.ini = os.path.join(cls.tmp.name, "games.ini")
         with open(cls.ini, "w") as f:
             f.write("[launcher]\nport = 1\n\n[lander]\ntitle = Lander\ndir = lander\n"
@@ -92,7 +112,7 @@ class DevBenchTest(unittest.TestCase):
         self.assertIn(b"ST DevBench", body)
         health = json.loads(self.call("GET", "/api/health")[2])
         self.assertTrue(health["hatari"])
-        games = json.loads(self.call("GET", "/api/projects")[2])
+        games = [g for g in json.loads(self.call("GET", "/api/projects")[2]) if g["kind"] == "game"]
         self.assertEqual([(g["id"], g["built"], g["program"]) for g in games],
                          [("lander", True, "LANDER.PRG"), ("unbuilt", False, "X.PRG")])
         self.assertEqual(games[0]["description"], "Land it.")
@@ -123,6 +143,118 @@ class DevBenchTest(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/projects/nosuch/build")[0], 404)
         self.assertEqual(self.call("POST", "/api/hatari/start", '{"machine": "c64"}')[0], 400)
         self.assertEqual(self.call("GET", "/nope")[0], 404)
+
+
+
+class ArcadeTest(DevBenchTest):
+    """The arcade and project discovery: every directory, pictures, play."""
+
+    def setUp(self):
+        # the games and Hatari are found; nothing is really built or started
+        self.calls = []
+        tc = {"hatari": "/bin/hatari", "cross": "x-", "cross_ok": True, "games_dir": self.tmp.name}
+        patches = [
+            (devbench.Bench, "toolchain", lambda b, lr=None: tc),
+            (devbench.games.Launcher, "play",
+             lambda lr, g, build=None, log=print: (self.calls.append(("play", g.id, g.build_dir)), log("started"))),
+            (devbench.games.Launcher, "make",
+             lambda lr, g, log=print: (self.calls.append(("make", g.id)), log("made"))),
+        ]
+        real_exists = os.path.exists
+        patches.append((devbench.os.path, "exists",
+                        lambda p: True if p.endswith((".img",)) else real_exists(p)))
+        for obj, name, fn in patches:
+            old = getattr(obj, name)
+            setattr(obj, name, fn)
+            self.addCleanup(setattr, obj, name, old)
+
+    def test_projects_cover_every_directory(self):
+        self.start()
+        ps = {p["id"]: p for p in json.loads(self.call("GET", "/api/projects")[2])}
+        self.assertEqual(sorted(ps), ["gemdemo", "lander", "lib", "menu", "unbuilt"])   # not assets
+        self.assertEqual(ps["gemdemo"]["kind"], "demo")
+        self.assertEqual(ps["gemdemo"]["program"], "GEMDEMO.PRG")
+        self.assertEqual(ps["gemdemo"]["title"], "GEMDEMO: a VDI showcase")
+        self.assertEqual(ps["gemdemo"]["description"], "A small GEM program. Two lines.")
+        self.assertEqual((ps["menu"]["program"], ps["menu"]["machine"]), ("LAUNCHER.PRG", "ste"))
+        self.assertEqual(ps["menu"]["reason"], "not built yet: Play runs make drive first")
+        self.assertEqual((ps["lib"]["kind"], ps["lib"]["playable"]), ("library", False))
+        self.assertIn("shared code", ps["lib"]["reason"])
+        self.assertTrue(ps["lander"]["playable"])
+        self.assertEqual(ps["lander"]["reason"], "")
+        self.assertEqual(ps["unbuilt"]["reason"], "not built yet: Play runs make first")
+        self.assertEqual(ps["lander"]["picture"], "/api/projects/lander/picture")
+        self.assertIsNone(ps["unbuilt"]["picture"])
+
+    def test_reasons_when_tools_are_missing(self):
+        devbench.Bench.toolchain = lambda b, lr=None: {"hatari": "/bin/hatari", "cross": "x-",
+                                                       "cross_ok": False, "games_dir": self.tmp.name}
+        self.start()
+        ps = {p["id"]: p for p in json.loads(self.call("GET", "/api/projects")[2])}
+        self.assertTrue(ps["lander"]["playable"])           # built: no compiler needed
+        self.assertFalse(ps["unbuilt"]["playable"])
+        self.assertIn("cross compiler", ps["unbuilt"]["reason"])
+        devbench.Bench.toolchain = lambda b, lr=None: {"hatari": None, "cross": "x-",
+                                                       "cross_ok": True, "games_dir": self.tmp.name}
+        ps = {p["id"]: p for p in json.loads(self.call("GET", "/api/projects")[2])}
+        self.assertFalse(ps["lander"]["playable"])
+        self.assertIn("Hatari isn't built", ps["lander"]["reason"])
+
+    def test_arcade_lists_only_games(self):
+        self.start()
+        a = json.loads(self.call("GET", "/api/arcade")[2])
+        self.assertTrue(a["ok"])
+        self.assertEqual([g["id"] for g in a["games"]], ["lander", "unbuilt"])
+        code, ctype, body = self.call("GET", "/arcade")
+        self.assertEqual(code, 200)
+        self.assertIn(b"ST Arcade", body)
+        code, ctype, body = self.call("GET", "/keys.js")
+        self.assertEqual((code, ctype.split(";")[0]), (200, "text/javascript"))
+        self.assertEqual(self.call("GET", "/devbench.py")[0], 404)
+        self.assertEqual(self.call("GET", "/../README.md")[0], 404)
+
+    def test_picture_and_readme(self):
+        self.start()
+        code, ctype, body = self.call("GET", "/api/projects/lander/picture")
+        self.assertEqual((code, ctype, body), (200, "image/png", b"\x89PNG lander"))
+        self.assertEqual(self.call("GET", "/api/projects/unbuilt/picture")[0], 404)
+        code, ctype, body = self.call("GET", "/api/projects/lander/readme")
+        self.assertEqual((code, body), (200, b"# Lander\n\nLand it gently.\n"))
+        self.assertEqual(self.call("GET", "/api/projects/unbuilt/readme")[0], 404)
+        self.assertEqual(self.call("GET", "/api/projects/nosuch/picture")[0], 404)
+
+    def test_play_builds_then_runs(self):
+        self.start()
+        r = json.loads(self.call("POST", "/api/arcade/play", '{"game": "lander"}')[2])
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(self.calls[0], ("make", "lander"))
+        self.assertEqual(self.calls[1][:2], ("play", "lander"))
+        self.assertEqual(json.loads(self.call("GET", "/api/arcade")[2])["playing"], "lander")
+        self.assertEqual(json.loads(self.call("GET", "/api/health")[2])["playing"], "lander")
+        self.calls.clear()
+        r = json.loads(self.call("POST", "/api/arcade/play", '{"game": "lander", "build": false}')[2])
+        self.assertEqual([c[0] for c in self.calls], ["play"])
+        self.assertEqual(self.call("POST", "/api/arcade/play", "{}")[0], 400)
+        self.assertEqual(self.call("POST", "/api/arcade/play", '{"game": "nosuch"}')[0], 404)
+
+    def test_demo_runs_from_its_drive(self):
+        self.start()
+        # the menu's C: is build/drive, made by "make drive" (stubbed: no make is run)
+        real = devbench.subprocess.run
+        seen = []
+
+        def fake_run(cmd, cwd=None, **kw):
+            seen.append((cmd, cwd))
+            return devbench.subprocess.CompletedProcess(cmd, 0, "ok")
+        devbench.subprocess.run = fake_run
+        self.addCleanup(setattr, devbench.subprocess, "run", real)
+        r = json.loads(self.call("POST", "/api/projects/menu/run")[2])
+        self.assertTrue(r["ok"], r)
+        self.assertEqual((seen[0][0][0], seen[0][0][-1], seen[0][1]), ("make", "drive", os.path.join(self.tmp.name, "menu")))
+        self.assertTrue(self.calls[-1][2].endswith(os.path.join("menu", "build", "drive")))
+        # shared code can't be built or run on its own
+        self.assertEqual(self.call("POST", "/api/projects/lib/run")[0], 400)
+        self.assertEqual(self.call("POST", "/api/projects/lib/build")[0], 400)
 
 
 if __name__ == "__main__":
