@@ -50,13 +50,45 @@ unbuilt game) instead of being left out.
   5 s, pause, resume, fast forward, warm and cold reset, keys and key
   combos, typed text, joystick (port 1) and snapshot save/load. While
   the screen has focus, the keyboard goes to the ST as on the arcade page.
-- **Console:** TOS console output and NatFeats `NF_STDERR` lines (the game
-  ports log through NatFeats).
-- **Debugger:** break, continue, step, step over; breakpoints by address,
-  symbol or condition (`pc=TEXT`, `d0=$20`); registers and disassembly at
-  the PC; any Hatari debugger command.
-- **Memory:** a hex dump at an address or expression.
-- **Agent API:** any endpoint, for what the page has no button for.
+- **Console / Game / Agent API** (tabs beside the screen; the page
+  remembers the last one): TOS console output and NatFeats `NF_STDERR`
+  lines (the game ports log through NatFeats); the game's picture,
+  description, controls and build output; any agent API endpoint, for
+  what the page has no button for.
+
+The debugger and the memory dump have the full width of the page below
+the screen, so nothing pushes them off it. Here stopped at a breakpoint
+on `game_update` in Rock Blaster:
+
+![The debugger panels stopped at a breakpoint in Rock Blaster](docs/debugger.png)
+
+- **Debugger:** Break, Continue, Step, Step ×N, Step over, Step out (run
+  until the subroutine returns). The stop line names the function
+  (`stopped: breakpoint at 0x01c646 in game_update`).
+  - **Registers:** D0-D7, A0-A7, PC, SR, USP, ISP (MSP, VBR on 68020+),
+    the ones that changed since the last stop in red, SR's flags decoded
+    (T1 T0 S M X N Z V C and the interrupt mask). Click a value to dump
+    memory there.
+  - **Disassembly:** at `pc`, a symbol (`_main`, `game_update`), `$addr`
+    or any expression, so many lines; Up / Down page through it, PC goes
+    back to the PC, and *follow PC* keeps it in view after each stop or
+    step. Symbol labels mark function starts. Click the gutter to set or
+    clear a breakpoint on a line; double-click a line to run to it.
+  - **Breakpoints:** by address, symbol or condition (`pc=TEXT`,
+    `d0=$20`), and **Watch**: break when the byte, word or long at an
+    address or symbol changes (a `(x).w ! (x).w` condition).
+  - **Symbols:** find the running program's symbols by name, with links
+    to disassemble or dump each. They come from the PRG the DevBench
+    started (Hatari's `gst2ascii`, moved to where the program is loaded),
+    otherwise from what the Hatari debugger has loaded.
+  - **Debugger command:** any Hatari debugger command and its output.
+- **Memory:** a hex + ASCII dump (16 bytes a row) at an address or
+  expression (`a0`, `_score`, `$ff8240`), Prev / Next pages, re-read on
+  each stop or step (an expression like `a0` is evaluated again), bytes
+  that changed since the last read in red. **Write** puts hex bytes at an
+  address.
+
+![The memory dump with the bytes changed since the last breakpoint in red](docs/memory.png)
 
 ## REST
 
@@ -68,6 +100,7 @@ unbuilt game) instead of being left out.
 | `GET /api/projects/{id}/readme` | its README.md |
 | `POST /api/projects/{id}/build` | `make` (cross compiler from games.ini; `make drive` for st_launcher) |
 | `POST /api/projects/{id}/run` | build if needed, then run; `{"build": false}` skips the build |
+| `GET /api/symbols?find=X` | the running program's symbols containing X: `{"symbols": [{"addr", "type", "name"}], "total", "source"}` (`prg` from the PRG started here, `debugger` otherwise) |
 | `GET /api/arcade` | `{"games": [...], "playing", "hatari"}`: the projects that are games |
 | `POST /api/arcade/play` | `{"game": id, "build": true}`: the same as `.../run` |
 | `POST /api/hatari/start` | `{"machine": "ste"}`: Hatari at the EmuTOS desktop |
