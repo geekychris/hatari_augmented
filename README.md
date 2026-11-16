@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="Hatari Augmented logo" width="180">
+</p>
+
 # Hatari: agentic development fork
 
 This is a fork of [Hatari](https://www.hatari-emu.org/), the Atari
